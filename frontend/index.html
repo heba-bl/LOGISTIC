@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F4F1EA" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#172A35" />
+    <meta
+      name="description"
+      content="Smart Logistics Control Center - supervision du flux de pieces, du fournisseur a la production."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <title>Smart Logistics — Centre de controle</title>
+    <script>
+      /*
+       * Apply the stored theme before the first paint.
+       *
+       * React sets the same class, but only after the bundle has parsed. Without
+       * this, a dark-mode user gets a full-page flash of the light palette on
+       * every load - and hard-coding a class in the markup just moves the flash
+       * to the other half of the users.
+       */
+      ;(function () {
+        try {
+          var stored = window.localStorage.getItem('slcc.theme')
+          var dark =
+            stored === 'dark' ||
+            ((stored === null || stored === 'system') &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (error) {
+          /* Private mode blocks localStorage: light is a safe default. */
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

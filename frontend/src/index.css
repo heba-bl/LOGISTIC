@@ -1,0 +1,216 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * SLCC design system.
+ *
+ * Colour carries meaning here, never decoration. Six semantic roles, used the
+ * same way on every screen:
+ *
+ *   blue    information, stock, flow      green   healthy, conform, available
+ *   yellow  attention                     orange  intermediate risk
+ *   red     critical, shortage, Red Cage   purple  what the assistant suggests
+ *
+ * Surfaces stay quiet - white cards on a pale ground in light mode, deep navy
+ * in dark - so the data is the only thing wearing colour.
+ *
+ * Three separate colour roles, never mixed:
+ *   --c-chart-*  categorical series, four slots, fixed order, never cycled
+ *   --c-seq-*    one blue ramp, for magnitude
+ *   --c-ok / warn / risk / crit / ai   reserved for state
+ *
+ * Contrast was measured, not guessed: every `-soft` ink clears 4.5:1 on both
+ * its surfaces. The green/yellow pair sits below the colourblind separation
+ * floor - unavoidable for a traffic-light convention - so a state is never
+ * signalled by colour alone: every badge carries its label, every arc its value.
+ *
+ * Values are RGB triplets so Tailwind can apply opacity to them.
+ */
+@layer base {
+  :root {
+    /* --- Light ---------------------------------------------------------- */
+    --c-canvas: 248 250 252;
+    --c-panel: 255 255 255;
+    --c-elevated: 241 245 249;
+    --c-line: 226 232 240;
+    --c-line-strong: 203 213 225;
+
+    --c-ink: 23 32 51;
+    --c-ink-2: 71 85 105;
+    --c-ink-3: 100 116 139;
+
+    /* Marks wear the vivid step, type wears the deep one. */
+    --c-accent: 59 130 246;
+    --c-accent-soft: 29 78 216;
+    --c-info: 59 130 246;
+    --c-info-soft: 29 78 216;
+    --c-ok: 34 197 94;
+    --c-ok-soft: 21 128 61;
+    --c-warn: 234 179 8;
+    --c-warn-soft: 161 98 7;
+    --c-risk: 249 115 22;
+    --c-risk-soft: 194 65 12;
+    --c-crit: 239 68 68;
+    --c-crit-soft: 185 28 28;
+    --c-ai: 139 92 246;
+    --c-ai-soft: 109 40 217;
+
+    /* Categorical series, in assignment order. */
+    --c-chart-1: 59 130 246;
+    --c-chart-2: 34 197 94;
+    --c-chart-3: 234 179 8;
+    --c-chart-4: 139 92 246;
+
+    /* Sequential ramp, deep to pale: magnitude only. */
+    --c-seq-1: 30 64 175;
+    --c-seq-2: 37 99 235;
+    --c-seq-3: 59 130 246;
+    --c-seq-4: 96 165 250;
+    --c-seq-5: 147 197 253;
+
+    --shadow-panel: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
+    --shadow-lift: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+
+    color-scheme: light;
+  }
+
+  .dark {
+    /* --- Dark: its own palette, not an inversion ------------------------ */
+    --c-canvas: 15 23 42;
+    --c-panel: 24 34 53;
+    --c-elevated: 30 41 59;
+    --c-line: 43 58 82;
+    --c-line-strong: 62 80 112;
+
+    --c-ink: 248 250 252;
+    --c-ink-2: 148 163 184;
+    --c-ink-3: 124 141 166;
+
+    /* On a dark ground the vivid step reads as type; marks go one step up. */
+    --c-accent: 96 165 250;
+    --c-accent-soft: 147 197 253;
+    --c-info: 96 165 250;
+    --c-info-soft: 147 197 253;
+    --c-ok: 74 222 128;
+    --c-ok-soft: 134 239 172;
+    --c-warn: 250 204 21;
+    --c-warn-soft: 253 224 71;
+    --c-risk: 251 146 60;
+    --c-risk-soft: 253 186 116;
+    --c-crit: 248 113 113;
+    --c-crit-soft: 252 165 165;
+    --c-ai: 167 139 250;
+    --c-ai-soft: 196 181 253;
+
+    --c-chart-1: 96 165 250;
+    --c-chart-2: 74 222 128;
+    --c-chart-3: 250 204 21;
+    --c-chart-4: 167 139 250;
+
+    --c-seq-1: 191 219 254;
+    --c-seq-2: 147 197 253;
+    --c-seq-3: 96 165 250;
+    --c-seq-4: 59 130 246;
+    --c-seq-5: 29 78 216;
+
+    --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.03) inset,
+      0 6px 20px -12px rgb(0 0 0 / 0.8);
+    --shadow-lift: 0 1px 0 0 rgb(255 255 255 / 0.05) inset,
+      0 10px 28px -14px rgb(0 0 0 / 0.9);
+
+    color-scheme: dark;
+  }
+
+  * {
+    @apply border-line;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-line-strong/70;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-line-strong;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/50 ring-offset-2 ring-offset-canvas;
+  }
+
+  /* Operators may run the app on a shop-floor screen with reduced motion. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* The structural surface of every screen. */
+  .panel {
+    @apply relative rounded-xl border border-line bg-panel shadow-panel;
+  }
+
+  /* A panel that responds to the pointer, for anything clickable. */
+  .panel-interactive {
+    @apply transition-all duration-200 hover:-translate-y-px hover:border-line-strong hover:shadow-lift;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between gap-3 border-b border-line px-4 py-3;
+  }
+
+  /* Uppercase micro-label for section titles and table headers. */
+  .eyebrow {
+    @apply text-2xs font-semibold uppercase tracking-widest2 text-ink-3;
+  }
+
+  .numeric {
+    @apply font-mono tabular-nums;
+  }
+
+  /* Dense data table used across the operational screens. */
+  .data-table {
+    @apply w-full border-collapse text-left;
+  }
+
+  .data-table thead th {
+    @apply eyebrow border-b border-line px-4 py-2.5 font-semibold;
+  }
+
+  .data-table tbody td {
+    @apply border-b border-line/60 px-4 py-2.5 text-xs text-ink-2;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-0;
+  }
+
+  .data-table tbody tr:hover {
+    @apply bg-elevated;
+  }
+}
