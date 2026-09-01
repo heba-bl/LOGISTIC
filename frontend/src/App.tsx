@@ -8,11 +8,11 @@ import QualiteFlux from '@/pages/analytics/QualiteFlux'
 import StockEntrepot from '@/pages/analytics/StockEntrepot'
 import VueGlobale from '@/pages/analytics/VueGlobale'
 import DonneesOperationnelles from '@/pages/DonneesOperationnelles'
+import Entry from '@/pages/Entry'
 import FichierOperationnel from '@/pages/FichierOperationnel'
 import Inspection from '@/pages/Inspection'
 import MissionControl from '@/pages/MissionControl'
 import NotFound from '@/pages/NotFound'
-import PosteOperateur from '@/pages/PosteOperateur'
 import Production from '@/pages/Production'
 import Quality from '@/pages/Quality'
 import Rapports from '@/pages/Rapports'
@@ -24,10 +24,15 @@ import Warehouse from '@/pages/Warehouse'
 export default function App() {
   return (
     <Routes>
+      {/* The entrance sits outside the shell: it has no sidebar, no topbar and
+          no page chrome, because it is not a page of the application yet. */}
+      <Route path="/" element={<Entry />} />
       <Route element={<AppLayout />}>
-        <Route index element={<Navigate to="/mission-control" replace />} />
         <Route path="/mission-control" element={<MissionControl />} />
-        <Route path="/operateur" element={<PosteOperateur />} />
+        {/* The operator station is gone: operators work in the shared
+            workbook, and this site is not in their hands. The address is
+            kept so an old bookmark lands somewhere sensible. */}
+        <Route path="/operateur" element={<Navigate to="/mission-control" replace />} />
 
         <Route path="/donnees" element={<FichierOperationnel />} />
         <Route path="/donnees/imports" element={<DonneesOperationnelles />} />

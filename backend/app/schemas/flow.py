@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import json
+
+from pydantic import BaseModel, Field, field_validator
 
 from app.models.enums import InspectionResult, LotStatus, QualityDecision, ReceptionStatus
 from app.schemas.common import UtcDatetime, ActorRef, LocationRef, ORMModel, PartRef, SupplierRef
@@ -18,8 +20,33 @@ class LotOut(ORMModel):
     quantity_approved: int
     quantity_available: int
     blocked_reason: str | None = None
+    #: Set when the services composed the reason; the interface words it.
+    blocked_reason_key: str | None = None
+    blocked_reason_values: dict = Field(default_factory=dict)
+
+    @field_validator("blocked_reason_values", mode="before")
+    @classmethod
+    def _decode_values(cls, value: object) -> dict:
+        """The column stores JSON text; the API hands back an object.
+
+        Decoding here rather than at every call site means a malformed row
+        degrades to an empty object instead of breaking the whole response -
+        the sentence in `blocked_reason` still explains the block.
+        """
+        if isinstance(value, dict):
+            return value
+        if not value:
+            return {}
+        try:
+            decoded = json.loads(value)
+        except (TypeError, ValueError):
+            return {}
+        return decoded if isinstance(decoded, dict) else {}
     received_at: UtcDatetime
     stored_at: UtcDatetime | None = None
+    #: Last movement on the lot. The supervision screens measure how long a
+    #: blocked lot has been waiting from this.
+    updated_at: UtcDatetime | None = None
     part: PartRef
     supplier: SupplierRef
     location: LocationRef | None = None
@@ -72,6 +99,15 @@ class InspectionCreate(BaseModel):
     actor_id: int | None = None
 
 
+class InspectionLotRef(ORMModel):
+    """Just enough of a lot to caption an inspection row."""
+
+    id: int
+    lot_number: str
+    part: PartRef
+    supplier: SupplierRef
+
+
 class InspectionOut(ORMModel):
     id: int
     reference: str
@@ -84,6 +120,9 @@ class InspectionOut(ORMModel):
     observations: str | None = None
     inspected_at: UtcDatetime
     inspector: ActorRef | None = None
+    #: The lot the sample was drawn from. A report that cannot say which part
+    #: was checked, and from which supplier, is not a report.
+    lot: InspectionLotRef | None = None
 
 
 class SampleSuggestion(BaseModel):

@@ -396,15 +396,21 @@ def audit_simulation(api: Api) -> None:
 
 def audit_dashboard(api: Api) -> None:
     dashboard = api.get("/dashboard")
-    stock_rows = api.get("/stock")
-    total_stock = sum(row["quantity_available"] for row in stock_rows)
 
     kpis = {kpi["id"]: kpi for kpi in dashboard["kpis"]}
-    check("Mission Control", "six KPIs are returned", len(dashboard["kpis"]) == 6)
+    # Mission Control is the present tense: every indicator is a snapshot, and
+    # the totals that used to sit here moved to the Analyse screens.
+    check("Mission Control", "six live KPIs are returned", len(dashboard["kpis"]) == 6)
     check(
         "Mission Control",
-        f"Total Stock KPI matches the stock table ({total_stock})",
-        int(kpis["total-stock"]["value"]) == total_stock,
+        "no period figure leaked back in",
+        "total-stock" not in kpis and "production-requests" not in kpis,
+        str(sorted(kpis)),
+    )
+    check(
+        "Mission Control",
+        "the workbook freshness is reported",
+        "excel-sync" in kpis,
     )
 
     grid = api.get("/warehouse/grid")

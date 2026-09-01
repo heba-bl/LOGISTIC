@@ -35,6 +35,9 @@ module.exports = {
         accent: {
           DEFAULT: withOpacity('--c-accent'),
           soft: withOpacity('--c-accent-soft'),
+          //: The far end of the brand gradient. Paired with `accent`, never
+          //: used alone: on its own it is just another blue.
+          2: withOpacity('--c-accent-2'),
           dim: 'rgb(var(--c-accent) / 0.12)',
         },
 
@@ -59,12 +62,10 @@ module.exports = {
           soft: withOpacity('--c-info-soft'),
           dim: 'rgb(var(--c-info) / 0.12)',
         },
-        //: Intermediate risk - between "watch this" and "the line stops".
-        risk: {
-          DEFAULT: withOpacity('--c-risk'),
-          soft: withOpacity('--c-risk-soft'),
-          dim: 'rgb(var(--c-risk) / 0.12)',
-        },
+        //: `risk` used to sit here, a fifth level between warn and crit. It was
+        //: never used by a component, and squeezing it in made warn and crit
+        //: indistinguishable to a colourblind reader. Three states, all proven
+        //: separable, beat four that blur.
         //: Reserved for what the assistant suggests, so a recommendation is
         //: never mistaken for a measured state.
         ai: {
@@ -95,7 +96,9 @@ module.exports = {
         mono: ['JetBrains Mono', 'SFMono-Regular', 'Consolas', 'monospace'],
       },
       fontSize: {
-        '2xs': ['0.6875rem', { lineHeight: '1rem' }],
+        //: 12px, not 11: below this the numerals in JetBrains Mono stop
+        //: being separable at a glance, which is the whole point of them.
+        '2xs': ['0.75rem', { lineHeight: '1.05rem' }],
       },
       letterSpacing: {
         widest2: '0.14em',

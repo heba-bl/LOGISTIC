@@ -73,8 +73,8 @@ export function SimulationPanel({ onCompleted }: SimulationPanelProps) {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="End-to-end simulation"
-        subtitle="Truck arrival to production issue, through the real workflow"
+        title={t('sim.title')}
+        subtitle={t('sim.subtitle')}
         width="lg"
         footer={
           <>
@@ -93,9 +93,9 @@ export function SimulationPanel({ onCompleted }: SimulationPanelProps) {
         }
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Part reference" hint="Leave empty to use the first active reference">
+          <Field label={t('recv.field.part')} hint={t('sim.partHint')}>
             <Select value={partId} onChange={(event) => setPartId(event.target.value)}>
-              <option value="">Automatic</option>
+              <option value="">{t('sim.automatic')}</option>
               {(parts.data ?? []).map((part) => (
                 <option key={part.id} value={part.id}>
                   {part.reference} — {part.designation}
@@ -104,9 +104,9 @@ export function SimulationPanel({ onCompleted }: SimulationPanelProps) {
             </Select>
           </Field>
 
-          <Field label="Stop after" hint="Run step by step to narrate the demonstration">
+          <Field label={t('sim.stopAfter')} hint={t('sim.stopAfterHint')}>
             <Select value={stopAfter} onChange={(event) => setStopAfter(event.target.value)}>
-              <option value="">Run the full chain</option>
+              <option value="">{t('sim.runFull')}</option>
               {Object.entries(STEP_LABELS).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -115,7 +115,7 @@ export function SimulationPanel({ onCompleted }: SimulationPanelProps) {
             </Select>
           </Field>
 
-          <Field label="Quantity delivered">
+          <Field label={t('sim.delivered')}>
             <input
               type="number"
               min={1}
@@ -125,7 +125,7 @@ export function SimulationPanel({ onCompleted }: SimulationPanelProps) {
             />
           </Field>
 
-          <Field label="Quantity requested by production">
+          <Field label={t('sim.requested')}>
             <input
               type="number"
               min={1}
@@ -149,7 +149,7 @@ export function SimulationPanel({ onCompleted }: SimulationPanelProps) {
                 </span>
                 <span className="text-2xs text-ink-3">{result.part_reference}</span>
                 <span className="ml-auto flex items-center gap-2 text-xs">
-                  <span className="text-ink-3">Stock</span>
+                  <span className="text-ink-3">{t('chart.stock')}</span>
                   <span className="numeric text-ink-2">
                     {formatNumber(result.stock_before)}
                   </span>

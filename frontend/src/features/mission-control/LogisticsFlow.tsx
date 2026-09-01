@@ -32,19 +32,27 @@ interface LogisticsFlowProps {
   onSelectLot?: (lot: Lot) => void
 }
 
-/** Animated connector carrying a light pulse from one stage to the next. */
+/**
+ * The wire between two stages, with a light running down it.
+ *
+ * The direction is set in CSS, not here: the flow stacks vertically on a narrow
+ * screen and runs horizontally on a wide one, and a single JS translate cannot
+ * serve both. It used to animate `y` in both cases, which on a wide screen sent
+ * the light drifting across the wire instead of along it.
+ *
+ * The stagger is what makes the chain read as one movement rather than five
+ * blinking dots.
+ */
 function Connector({ index }: { index: number }) {
   return (
     <div
-      className="relative flex shrink-0 items-center justify-center xl:h-full xl:w-6"
+      className="relative flex shrink-0 items-center justify-center xl:h-full xl:w-8"
       aria-hidden="true"
     >
       <div className="h-6 w-px bg-line xl:h-px xl:w-full" />
-      <motion.span
-        className="absolute h-1.5 w-1.5 rounded-full bg-accent shadow-glow"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: [0, 1, 1, 0], y: ['-10px', '10px'] }}
-        transition={{ duration: 1.6, repeat: Infinity, delay: index * 0.28, ease: 'linear' }}
+      <span
+        className="flow-pulse absolute h-1.5 w-1.5 rounded-full bg-accent shadow-glow"
+        style={{ animationDelay: `${index * 0.3}s` }}
       />
     </div>
   )
@@ -117,13 +125,13 @@ export function LogisticsFlow({ stages, onSelectLot }: LogisticsFlowProps) {
                       type="button"
                       onClick={() => onSelectLot?.(lot)}
                       title={`${lot.lot_number} · ${lot.part.reference}`}
-                      className="flex w-full items-center gap-1.5 rounded border border-line bg-panel/70 px-2 py-1 text-left transition-colors hover:border-line-strong hover:bg-panel"
+                      className="flex min-h-[34px] w-full cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-panel/70 px-2.5 text-left transition-all duration-[var(--t-fast)] hover:-translate-y-px hover:border-accent/40 hover:bg-panel hover:shadow-panel"
                     >
                       <StatusDot severity={lotStatusSeverity[lot.status]} />
-                      <span className="numeric truncate text-[10px] text-ink-2">
+                      <span className="numeric truncate text-[11px] text-ink-2">
                         {lot.lot_number}
                       </span>
-                      <span className="numeric ml-auto text-[10px] text-ink-3">
+                      <span className="numeric ml-auto text-[11px] text-ink-3">
                         {lot.status === 'STORED' ? lot.quantity_available : lot.quantity_received}
                       </span>
                     </button>

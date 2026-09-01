@@ -202,19 +202,19 @@ export default function StockEntrepot() {
             />
             <dl className="grid w-full grid-cols-3 gap-2 border-t border-line pt-3 text-center">
               <div>
-                <dt className="text-[10px] text-ink-3">{t('metric.occupancy')}</dt>
+                <dt className="text-[11px] text-ink-3">{t('metric.occupancy')}</dt>
                 <dd className="numeric mt-0.5 text-xs font-semibold text-ink">
                   {formatNumber(warehouse.total_occupied)}
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] text-ink-3">{t('warehouse.capacity')}</dt>
+                <dt className="text-[11px] text-ink-3">{t('warehouse.capacity')}</dt>
                 <dd className="numeric mt-0.5 text-xs font-semibold text-ink">
                   {formatNumber(warehouse.total_capacity)}
                 </dd>
               </div>
               <div>
-                <dt className="text-[10px] text-ink-3">{t('metric.free')}</dt>
+                <dt className="text-[11px] text-ink-3">{t('metric.free')}</dt>
                 <dd className="numeric mt-0.5 text-xs font-semibold text-ok-soft">
                   {formatNumber(warehouse.total_capacity - warehouse.total_occupied)}
                 </dd>

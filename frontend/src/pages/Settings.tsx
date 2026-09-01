@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Monitor, Moon, Save, Settings as SettingsIcon, Sun, Users } from 'lucide-react'
 
 import { PageHeader } from '@/components/PageHeader'
+import { SimulationPanel } from '@/features/simulation/SimulationPanel'
 import {
   Badge,
   Button,
@@ -14,18 +15,25 @@ import {
 import { useActor, useApiResource, useToast } from '@/hooks'
 import { useTheme, type ThemeChoice } from '@/hooks/useTheme'
 import { useI18n } from '@/i18n/I18nProvider'
-import type { Locale } from '@/i18n/messages'
+import type { Locale, MessageKey } from '@/i18n/messages'
 import { toErrorMessage } from '@/services/apiClient'
 import { catalogApi } from '@/services/slcc.service'
 import { cn } from '@/utils/cn'
 import type { Setting } from '@/types/domain'
 
-const GROUP_LABELS: Record<string, string> = {
-  reception: 'Reception tolerance',
-  inspection: 'Sampling and defects',
-  warehouse: 'Warehouse thresholds',
-  ai: 'AI thresholds',
-  general: 'General',
+//: Business rules are named by the interface, not by the API. The backend
+//: ships a stable key for each one, which is what gets translated; the English
+//: label it also sends is the fallback, so a rule added tomorrow still shows a
+//: readable name instead of a missing entry.
+function useSettingText() {
+  const { t, locale } = useI18n()
+  return (key: string, fallback: string, suffix = '') => {
+    const candidate = `setting.${key}${suffix}` as MessageKey
+    const translated = t(candidate)
+    return translated === candidate ? fallback : translated
+  }
+  // `locale` is read so the closure is rebuilt when the language changes.
+  void locale
 }
 
 /**
@@ -36,7 +44,8 @@ const GROUP_LABELS: Record<string, string> = {
  * are all editable here and take effect immediately.
  */
 export default function Settings() {
-  const { t, ts } = useI18n()
+  const { t } = useI18n()
+  const settingText = useSettingText()
   const settings = useApiResource(() => catalogApi.settings(), [])
   const parts = useApiResource(() => catalogApi.parts(), [])
   const suppliers = useApiResource(() => catalogApi.suppliers(), [])
@@ -53,6 +62,17 @@ export default function Settings() {
       <AppearancePanel />
       <OperatorPanel />
 
+      {/* The end-to-end simulation lives here, not on Mission Control.
+          It writes to the database through the real services, which is exactly
+          what a supervision screen must never appear to do - having it beside
+          live figures invited the reader to doubt they were real. */}
+      <Panel
+        title={t('settings.demonstration')}
+        subtitle={t('settings.demonstrationSubtitle')}
+      >
+        <SimulationPanel />
+      </Panel>
+
       <Panel
         title={t('settings.businessRules')}
         subtitle={t('settings.businessRulesSubtitle')}
@@ -67,7 +87,7 @@ export default function Settings() {
           <div className="divide-y divide-line">
             {Object.entries(groups).map(([group, rows]) => (
               <div key={group} className="px-5 py-4">
-                <p className="eyebrow mb-3">{GROUP_LABELS[group] ?? ts(group)}</p>
+                <p className="eyebrow mb-3">{settingText(`group.${group}`, group)}</p>
                 <ul className="space-y-3">
                   {rows.map((setting) => (
                     <SettingRow
@@ -100,7 +120,7 @@ export default function Settings() {
                     <th className="eyebrow px-5 py-2.5 font-semibold">Class</th>
                     <th className="eyebrow px-5 py-2.5 text-right font-semibold">Tolerance</th>
                     <th className="eyebrow px-5 py-2.5 text-right font-semibold">Safety</th>
-                    <th className="eyebrow px-5 py-2.5 text-right font-semibold">Daily use</th>
+                    <th className="eyebrow px-5 py-2.5 text-right font-semibold">{t('settings.dailyUse')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -165,6 +185,8 @@ export default function Settings() {
 }
 
 function SettingRow({ setting, onSaved }: { setting: Setting; onSaved: () => void }) {
+  const { t } = useI18n()
+  const settingText = useSettingText()
   const [value, setValue] = useState(setting.value)
   const [saving, setSaving] = useState(false)
   const toast = useToast()
@@ -175,7 +197,7 @@ function SettingRow({ setting, onSaved }: { setting: Setting; onSaved: () => voi
     setSaving(true)
     try {
       await catalogApi.updateSetting(setting.key, value)
-      toast.success('Setting updated', `${setting.label} = ${value}`)
+      toast.success(t('setting.updated'), `${settingText(setting.key, setting.label)} = ${value}`)
       onSaved()
     } catch (error) {
       toast.error('Update refused', toErrorMessage(error))
@@ -188,11 +210,15 @@ function SettingRow({ setting, onSaved }: { setting: Setting; onSaved: () => voi
   return (
     <li className="flex flex-wrap items-start gap-3">
       <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-ink">{setting.label}</p>
+        <p className="text-xs font-medium text-ink">
+          {settingText(setting.key, setting.label)}
+        </p>
         {setting.description && (
-          <p className="mt-0.5 text-2xs leading-relaxed text-ink-3">{setting.description}</p>
+          <p className="mt-0.5 text-2xs leading-relaxed text-ink-3">
+            {settingText(setting.key, setting.description, '.help')}
+          </p>
         )}
-        <p className="numeric mt-1 text-[10px] text-ink-3/70">{setting.key}</p>
+        <p className="numeric mt-1 text-[11px] text-ink-3/70">{setting.key}</p>
       </div>
 
       <div className="flex items-center gap-2">

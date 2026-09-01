@@ -5,6 +5,8 @@ import { CornerDownLeft, Loader2, Sparkles, User2 } from 'lucide-react'
 import { aiApi } from '@/services/slcc.service'
 import { toErrorMessage } from '@/services/apiClient'
 import { cn } from '@/utils/cn'
+import { useI18n } from '@/i18n/I18nProvider'
+import type { MessageKey } from '@/i18n/messages'
 import type { CopilotAnswer } from '@/types/domain'
 
 interface Exchange {
@@ -14,10 +16,24 @@ interface Exchange {
   error?: string
 }
 
-const FALLBACK_SUGGESTIONS = [
-  "What are today's priorities?",
-  'Which lots are blocked?',
-  'Is there a shortage risk?',
+//: Shown until the backend proposes its own. Keys, not sentences: an operator
+//: reading a French screen must not be prompted in English.
+const FALLBACK_SUGGESTION_KEYS: MessageKey[] = [
+  'copilot.suggestion.priorities',
+  'copilot.suggestion.blocked',
+  'copilot.suggestion.shortage',
+]
+
+//: The backend proposes its questions in English. Those it is known to send are
+//: asked in the reader's language; anything new falls through unchanged rather
+//: than being dropped.
+const SUGGESTION_KEYS: { match: RegExp; key: MessageKey }[] = [
+  { match: /priorit/i, key: 'copilot.suggestion.priorities' },
+  { match: /blocked|red cage/i, key: 'copilot.suggestion.blocked' },
+  { match: /rack|nearly full/i, key: 'copilot.suggestion.racks' },
+  { match: /shortage/i, key: 'copilot.suggestion.shortage' },
+  { match: /decreasing/i, key: 'copilot.suggestion.decreasing' },
+  { match: /handle first/i, key: 'copilot.suggestion.first' },
 ]
 
 let exchangeId = 1
@@ -29,17 +45,32 @@ let exchangeId = 1
  * comes with the source that produced it. The Copilot never invents a number.
  */
 export function LogisticsCopilot({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n()
+  const fallback = FALLBACK_SUGGESTION_KEYS.map((key) => t(key))
+
   const [question, setQuestion] = useState('')
   const [exchanges, setExchanges] = useState<Exchange[]>([])
   const [loading, setLoading] = useState(false)
-  const [suggestions, setSuggestions] = useState<string[]>(FALLBACK_SUGGESTIONS)
+  const [suggestions, setSuggestions] = useState<string[]>(fallback)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     aiApi
       .suggestions()
-      .then((list) => setSuggestions(list.slice(0, compact ? 3 : 6)))
-      .catch(() => setSuggestions(FALLBACK_SUGGESTIONS))
+      .then((list) =>
+        setSuggestions(
+          list.slice(0, compact ? 3 : 6).map((question) => {
+            const known = SUGGESTION_KEYS.find((entry) => entry.match.test(question))
+            if (!known) return question
+            // A reference inside the question is data, not copy: keep it.
+            const reference = question.match(/[A-Z]{2,5}-\d{2,4}/)?.[0] ?? ''
+            return t(known.key, { reference })
+          }),
+        ),
+      )
+      .catch(() => setSuggestions(FALLBACK_SUGGESTION_KEYS.map((key) => t(key))))
+    // `t` is stable for a given locale; listing it would refetch on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compact])
 
   useEffect(() => {
@@ -128,7 +159,7 @@ export function LogisticsCopilot({ compact = false }: { compact?: boolean }) {
                             {exchange.answer.sources.map((source) => (
                               <span
                                 key={source.label}
-                                className="rounded border border-line bg-elevated px-2 py-0.5 text-[10px] text-ink-3"
+                                className="rounded border border-line bg-elevated px-2 py-0.5 text-[11px] text-ink-3"
                               >
                                 {source.label}:{' '}
                                 <span className="numeric text-ink-2">{source.value}</span>
@@ -159,7 +190,7 @@ export function LogisticsCopilot({ compact = false }: { compact?: boolean }) {
             <Sparkles className="h-4 w-4 text-accent" strokeWidth={1.9} />
           </motion.span>
           <div className="leading-tight">
-            <p className="text-sm font-semibold text-ink">Logistics Copilot</p>
+            <p className="text-sm font-semibold text-ink">{t('copilot.title')}</p>
             <p className="mt-1 text-2xs text-ink-3">Answers grounded in live data.</p>
           </div>
         </div>
@@ -170,14 +201,14 @@ export function LogisticsCopilot({ compact = false }: { compact?: boolean }) {
               type="text"
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              placeholder="Ask Logistics Copilot…"
-              aria-label="Ask Logistics Copilot"
+              placeholder={t('copilot.placeholder')}
+              aria-label={t('copilot.placeholder')}
               className="w-full rounded-lg border border-line bg-panel/80 py-2.5 pl-4 pr-24 text-xs text-ink placeholder:text-ink-3 transition-colors hover:border-line-strong focus:border-accent/60 focus:outline-none"
             />
             <button
               type="submit"
               disabled={loading || !question.trim()}
-              className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded border border-line bg-elevated px-2 py-1 text-[9px] font-medium text-ink-2 transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-50"
+              className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-1 rounded border border-line bg-elevated px-2 py-1 text-[11px] font-medium text-ink-2 transition-colors hover:border-accent/50 hover:text-accent disabled:opacity-50"
             >
               {loading ? (
                 <Loader2 className="h-2.5 w-2.5 animate-spin" />
@@ -195,7 +226,7 @@ export function LogisticsCopilot({ compact = false }: { compact?: boolean }) {
                 type="button"
                 onClick={() => void ask(suggestion)}
                 disabled={loading}
-                className="rounded-full border border-line bg-panel/60 px-2.5 py-1 text-[10px] text-ink-3 transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
+                className="rounded-full border border-line bg-panel/60 px-2.5 py-1 text-[11px] text-ink-3 transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-50"
               >
                 {suggestion}
               </button>

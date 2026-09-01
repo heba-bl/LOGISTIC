@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { Meter, StatusDot } from '@/components/ui'
 import { cn } from '@/utils/cn'
 import { formatDecimal, formatNumber } from '@/utils/format'
+import { useCountUp } from '@/hooks/useCountUp'
 import { useI18n } from '@/i18n/I18nProvider'
 import { severityStyles, toSeverity } from '@/utils/status'
 import type { MessageKey } from '@/i18n/messages'
@@ -20,16 +21,44 @@ interface KpiGridProps {
  */
 //: The backend returns a stable id per KPI; the label is translated here.
 const KPI_KEYS: Record<string, MessageKey> = {
-  'total-stock': 'kpi.totalStock',
   'active-lots': 'kpi.activeLots',
   'pending-inspections': 'kpi.pendingInspections',
-  'production-requests': 'kpi.productionRequests',
+  'uncovered-requests': 'kpi.uncoveredRequests',
   'warehouse-occupancy': 'kpi.warehouseOccupancy',
   'critical-alerts': 'kpi.criticalAlerts',
+  'excel-sync': 'kpi.excelSync',
+}
+
+/**
+ * One tile's figure, counting to its value.
+ *
+ * Its own component because the hook has to run per tile: called in the map
+ * body it would be a conditional hook, and React would be right to complain.
+ */
+function Figure({ value, isRatio }: { value: number; isRatio: boolean }) {
+  const shown = useCountUp(value)
+  return (
+    <span className="figure text-2xl leading-none">
+      {isRatio ? formatDecimal(shown) : formatNumber(Math.round(shown))}
+    </span>
+  )
 }
 
 export function KpiGrid({ kpis }: KpiGridProps) {
   const { t } = useI18n()
+
+  /**
+   * The sub-line, in the interface language.
+   *
+   * Falls back to the backend's English wording rather than to nothing: a tile
+   * missing its context line reads as a bug, while an untranslated one reads
+   * as a translation still to do - which is what it is.
+   */
+  const worded = (kpi: Kpi) => {
+    if (!kpi.hint_key) return kpi.hint
+    const text = t(kpi.hint_key as MessageKey, kpi.hint_values)
+    return text === kpi.hint_key ? kpi.hint : text
+  }
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
       {kpis.map((kpi, index) => {
@@ -58,9 +87,7 @@ export function KpiGrid({ kpis }: KpiGridProps) {
             </div>
 
             <p className="mt-3 flex items-baseline gap-1">
-              <span className="numeric text-2xl font-semibold leading-none text-ink">
-                {isRatio ? formatDecimal(kpi.value) : formatNumber(kpi.value)}
-              </span>
+              <Figure value={kpi.value} isRatio={isRatio} />
               {kpi.unit && <span className="text-xs font-medium text-ink-3">{kpi.unit}</span>}
             </p>
 
@@ -68,7 +95,7 @@ export function KpiGrid({ kpis }: KpiGridProps) {
               <Meter value={kpi.ratio} severity={severity} label={kpi.label} className="mt-3" />
             )}
 
-            <p className="mt-2.5 text-2xs leading-relaxed text-ink-3">{kpi.hint}</p>
+            <p className="mt-2.5 text-2xs leading-relaxed text-ink-3">{worded(kpi)}</p>
           </motion.article>
         )
       })}

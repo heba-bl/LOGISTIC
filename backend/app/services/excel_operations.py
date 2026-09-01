@@ -47,6 +47,16 @@ VBA_ASSET = Path(__file__).resolve().parents[1] / "assets" / "vbaProject.bin"
 #: The VBA reads its headers from this row; the two must agree.
 HEADER_ROW = 4
 
+#: Rows an entry sheet offers, seeded history included. The entry grid, the
+#: status colouring and the dropdown ranges must cover the same cells: a
+#: dropdown that stops at row 60 silently lets row 61 be typed free-hand.
+GRID_ROWS = 120
+
+#: How much history each sheet arrives with. Enough to look like a shift and to
+#: practise a multi-line validation on, not so much that the blank rows below
+#: are pushed off the screen.
+SEED_ROWS = 40
+
 #: Sober, industrial. Colour marks a state and nothing else.
 INK = "1F2937"
 HEADER_BG = "1F3864"
@@ -391,6 +401,25 @@ def _title(sheet: Worksheet, title: str, subtitle: str, columns: int) -> None:
     sheet.row_dimensions[3].height = 6
 
 
+#: What row 3 says before the workbook has ever reached SLCC. Rewritten in place
+#: by StampFreshness, so the wording only has to survive being overwritten.
+FRESH_ROW = 3
+FRESH_IDLE = "SLCC - aucune synchronisation depuis l'ouverture du fichier"
+
+
+def _freshness_banner(sheet: Worksheet, columns: int) -> None:
+    """The synchronisation line, under the title of an entry sheet."""
+    cell = sheet.cell(row=FRESH_ROW, column=1, value=FRESH_IDLE)
+    cell.font = Font(size=9, italic=True, color=MUTED)
+    cell.alignment = Alignment(horizontal="left", vertical="center")
+    if columns > 1:
+        sheet.merge_cells(
+            start_row=FRESH_ROW, start_column=1, end_row=FRESH_ROW, end_column=columns
+        )
+    # _title flattens this row to a 6px gap; an entry sheet needs to read it.
+    sheet.row_dimensions[FRESH_ROW].height = 15
+
+
 def _headers(
     sheet: Worksheet,
     columns: tuple[tuple[str, bool, int], ...],
@@ -561,7 +590,7 @@ def _dropdowns(
     ranges: dict[str, str],
     catalogue_rows: int,
     location_rows: int,
-    rows: int = 60,
+    rows: int = GRID_ROWS,
 ) -> None:
     """Turn every column with a knowable set of answers into a list.
 
@@ -670,7 +699,7 @@ def _status_rules(sheet: Worksheet, columns: tuple[tuple[str, bool, int], ...], 
 def _entry_grid(
     sheet: Worksheet,
     columns: tuple[tuple[str, bool, int], ...],
-    rows: int = 60,
+    rows: int = GRID_ROWS,
     seeded: list[list] | None = None,
     formulas: dict[str, str] | None = None,
 ) -> None:
@@ -854,7 +883,7 @@ def _fmt(moment) -> tuple[str, str]:
     return moment.strftime("%d/%m/%Y"), moment.strftime("%H:%M")
 
 
-def _seed_rows(db, zone: str, limit: int = 12) -> list[dict[str, object]]:
+def _seed_rows(db, zone: str, limit: int = SEED_ROWS) -> list[dict[str, object]]:
     """The most recent operations of one zone, as sheet rows.
 
     Read straight from the business tables. Nothing here decides anything: it is
@@ -1057,6 +1086,92 @@ DECISION_WORDS = {
 }
 
 
+#: How many outstanding items a sheet opens with. Enough to practise a bulk
+#: validation on; small enough that the file is not a to-do list of a hundred.
+PENDING_ROWS = 10
+
+
+def _pending_rows(db, zone: str, limit: int = PENDING_ROWS) -> list[dict[str, object]]:
+    """Work the plant still owes, as draft rows an operator can complete.
+
+    Read from the same tables as the history: a lot sitting in
+    PENDING_INSPECTION really is waiting for somebody. Nothing is fabricated,
+    and the columns the operator has to measure are deliberately left empty.
+    """
+    if db is None:
+        return []
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    from app.models.enums import LotStatus, ProductionRequestStatus
+    from app.models.flow import Lot
+    from app.models.production import ProductionRequest
+
+    def lots(*states):
+        return db.execute(
+            select(Lot)
+            .where(Lot.status.in_(states))
+            .options(selectinload(Lot.part), selectinload(Lot.supplier))
+            .order_by(Lot.received_at.desc())
+            .limit(limit)
+        ).scalars().all()
+
+    rows: list[dict[str, object]] = []
+
+    if zone == "INSPECTION":
+        for lot in lots(LotStatus.PENDING_INSPECTION, LotStatus.INSPECTION_IN_PROGRESS):
+            rows.append({
+                "ID_LOT": lot.lot_number,
+                "REFERENCE_PIECE": lot.part.reference,
+                "QUANTITE_LOT": lot.quantity_received,
+            })
+
+    elif zone == "QUALITE":
+        for lot in lots(LotStatus.QUALITY_PENDING):
+            rows.append({
+                "ID_LOT": lot.lot_number,
+                "REFERENCE_PIECE": lot.part.reference,
+                "QUANTITE": lot.quantity_received,
+            })
+
+    elif zone == "WAREHOUSE":
+        # Approved and not yet stored: the magasin has these on the dock.
+        for lot in lots(LotStatus.APPROVED):
+            rows.append({
+                "ID_LOT": lot.lot_number,
+                "REFERENCE_PIECE": lot.part.reference,
+                "QUANTITE": lot.quantity_received,
+            })
+
+    elif zone == "SORTIES":
+        for request in db.execute(
+            select(ProductionRequest)
+            .where(
+                ProductionRequest.status.in_(
+                    (
+                        ProductionRequestStatus.APPROVED,
+                        ProductionRequestStatus.PREPARING,
+                        ProductionRequestStatus.READY,
+                    )
+                )
+            )
+            .options(
+                selectinload(ProductionRequest.part),
+                selectinload(ProductionRequest.station),
+            )
+            .order_by(ProductionRequest.created_on.desc())
+            .limit(limit)
+        ).scalars().all():
+            rows.append({
+                "ID_DEMANDE": request.reference,
+                "REFERENCE_PIECE": request.part.reference,
+                "QUANTITE_PREPAREE": request.quantity_requested,
+            })
+
+    return rows
+
+
 def _seeded_grid(
     db, zone: str, columns: tuple[tuple[str, bool, int], ...]
 ) -> list[list]:
@@ -1070,6 +1185,14 @@ def _seeded_grid(
         record["ETAT_SYNC"] = SYNC_DONE
         record["ID_SYNC"] = f"{zone}-HISTORIQUE-{len(grid) + 1:03d}"
         grid.append([record.get(name, "") for name in names])
+
+    # Outstanding work, below the history and left for the operator. BROUILLON
+    # and not EN ATTENTE: the line is not finished, so it is not yet anybody's
+    # to validate - and no ID_SYNC, because nothing has been sent.
+    for record in _pending_rows(db, zone):
+        record["STATUT"] = STATUS_DRAFT
+        grid.append([record.get(name, "") for name in names])
+
     return grid
 
 
@@ -1140,10 +1263,11 @@ def _operational_sheet(
     if seeded is None and db is not None:
         seeded = _seeded_grid(db, title, columns)
     _title(sheet, title, subtitle, len(columns))
+    _freshness_banner(sheet, len(columns))
     _headers(sheet, columns, automatic=_automatic_columns(columns, formulas))
     _entry_grid(sheet, columns, seeded=seeded, formulas=formulas)
     _fold_machinery(sheet, columns)
-    _status_rules(sheet, columns, rows=60)
+    _status_rules(sheet, columns, rows=GRID_ROWS)
     _dropdowns(
         sheet,
         title,

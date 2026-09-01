@@ -144,7 +144,7 @@ export function ComboChart({ points, emptyMessage, labels }: ComboChartProps) {
             y={height - 8}
             textAnchor={index === 0 ? 'start' : 'end'}
             className="fill-current text-ink-3"
-            style={{ fontSize: 10 }}
+            style={{ fontSize: 11 }}
           >
             {formatDay(points[index].date)}
           </text>
@@ -238,7 +238,7 @@ export function Waterfall({ steps, emptyMessage, labelFor }: WaterfallProps) {
               />
             </div>
             {bar.kind !== 'START' && bar.kind !== 'END' && (
-              <p className="numeric mt-0.5 text-[10px] text-ink-3">
+              <p className="numeric mt-0.5 text-[11px] text-ink-3">
                 {formatNumber(bar.from)} → {formatNumber(bar.to)}
               </p>
             )}
@@ -277,7 +277,7 @@ export function Heatmap({ cells, emptyMessage, onSelect, legend }: HeatmapProps)
           {positions.map((position) => (
             <span
               key={position}
-              className="numeric text-center text-[10px] text-ink-3"
+              className="numeric text-center text-[11px] text-ink-3"
             >
               {String(position).padStart(2, '0')}
             </span>
@@ -295,7 +295,7 @@ export function Heatmap({ cells, emptyMessage, onSelect, legend }: HeatmapProps)
           ))}
         </div>
 
-        <div className="mt-3 flex items-center gap-2 text-[10px] text-ink-3">
+        <div className="mt-3 flex items-center gap-2 text-[11px] text-ink-3">
           <span>{legend.empty}</span>
           {[...RAMP_BG].reverse().map((className) => (
             <span key={className} className={cn('h-2.5 w-7 rounded-sm', className)} />
@@ -346,7 +346,7 @@ function Row({
                 `RAMP_TEXT` carries the measured ink for each step. */}
             <span
               className={cn(
-                'numeric text-[10px] font-semibold',
+                'numeric text-[11px] font-semibold',
                 RAMP_TEXT[step],
                 cell.occupied === 0 && 'text-ink-3 dark:text-ink-3',
               )}
@@ -481,7 +481,7 @@ export function ScatterPlot({
           y={Math.min(risk.y2 + 14, floorY - 6)}
           textAnchor="end"
           className="fill-current text-crit-soft"
-          style={{ fontSize: 10 }}
+          style={{ fontSize: 11 }}
         >
           {riskZoneLabel} · {coverageLabel(riskDays)}
         </text>
@@ -502,7 +502,7 @@ export function ScatterPlot({
               y={floorY + 14}
               textAnchor="middle"
               className="fill-current text-ink-3"
-              style={{ fontSize: 9 }}
+              style={{ fontSize: 11 }}
             >
               {formatNumber(tick)}
             </text>
@@ -523,7 +523,7 @@ export function ScatterPlot({
               y={logY(tick) + 3}
               textAnchor="end"
               className="fill-current text-ink-3"
-              style={{ fontSize: 9 }}
+              style={{ fontSize: 11 }}
             >
               {formatNumber(tick)}
             </text>
@@ -549,7 +549,7 @@ export function ScatterPlot({
           y={floorY + 3}
           textAnchor="end"
           className="fill-current text-ink-3"
-          style={{ fontSize: 9 }}
+          style={{ fontSize: 11 }}
         >
           0
         </text>
@@ -576,7 +576,7 @@ export function ScatterPlot({
                 y={y(point.available) - r(point.demand) - 4}
                 textAnchor="middle"
                 className="fill-current text-ink-2"
-                style={{ fontSize: 9 }}
+                style={{ fontSize: 11 }}
               >
                 {point.reference}
               </text>
@@ -589,7 +589,7 @@ export function ScatterPlot({
           y={height - 8}
           textAnchor="middle"
           className="fill-current text-ink-3"
-          style={{ fontSize: 10 }}
+          style={{ fontSize: 11 }}
         >
           {axisLabels.x}
         </text>
@@ -600,7 +600,7 @@ export function ScatterPlot({
           transform={`rotate(-90 14 ${padding.top + innerHeight / 2})`}
           textAnchor="middle"
           className="fill-current text-ink-3"
-          style={{ fontSize: 10 }}
+          style={{ fontSize: 11 }}
         >
           {axisLabels.y}
         </text>

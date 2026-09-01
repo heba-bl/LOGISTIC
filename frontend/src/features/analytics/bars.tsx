@@ -100,7 +100,7 @@ export function HBarChart({
               </div>
 
               {point.caption && (
-                <p className="mt-0.5 truncate text-[10px] text-ink-3">{point.caption}</p>
+                <p className="mt-0.5 truncate text-[11px] text-ink-3">{point.caption}</p>
               )}
             </Row>
           </li>
@@ -215,14 +215,14 @@ export function StockDemandBars({
               <p className="mt-1.5 flex items-center gap-1.5">
                 <span
                   className={cn(
-                    'numeric rounded px-1.5 py-0.5 text-[10px] font-semibold',
+                    'numeric rounded px-1.5 py-0.5 text-[11px] font-semibold',
                     uncovered ? 'bg-crit/12 text-crit-soft' : 'bg-ok/12 text-ok-soft',
                   )}
                 >
                   {row.gap > 0 ? '+' : ''}
                   {formatNumber(row.gap)}
                 </span>
-                <span className="text-[10px] text-ink-3">{t('chart.gap')}</span>
+                <span className="text-[11px] text-ink-3">{t('chart.gap')}</span>
               </p>
             </Row>
           </li>
@@ -250,7 +250,7 @@ function BarLine({
   const ratio = ceiling > 0 ? (value / ceiling) * 100 : 0
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-[10px] uppercase tracking-wider text-ink-3">
+      <span className="w-16 shrink-0 text-[11px] uppercase tracking-wider text-ink-3">
         {label}
       </span>
       <div className="h-2 flex-1 overflow-hidden rounded-full bg-line/60">

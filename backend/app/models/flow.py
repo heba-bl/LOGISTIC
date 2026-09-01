@@ -60,6 +60,11 @@ class Lot(Base, TimestampMixin):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     blocked_reason: Mapped[str | None] = mapped_column(Text)
+    #: Set only when the services composed the reason themselves, so the screen
+    #: can word it in the reader's language. A justification typed by a manager
+    #: has no key: their words are the record.
+    blocked_reason_key: Mapped[str | None] = mapped_column(String(40))
+    blocked_reason_values: Mapped[str | None] = mapped_column(Text)
 
     part: Mapped["Part"] = relationship(back_populates="lots")
     supplier: Mapped["Supplier"] = relationship(back_populates="lots")

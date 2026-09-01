@@ -108,15 +108,15 @@ export function FlowFunnel({
                     <span className="numeric text-lg font-semibold leading-none text-ink">
                       {formatNumber(stage.lot_count)}
                     </span>
-                    <span className="text-[10px] text-ink-3">{t('flow.lots')}</span>
+                    <span className="text-[11px] text-ink-3">{t('flow.lots')}</span>
                   </p>
 
-                  <p className="numeric mt-1 text-[10px] text-ink-3">
+                  <p className="numeric mt-1 text-[11px] text-ink-3">
                     {formatNumber(stage.quantity)} {t('unit.pcs')}
                   </p>
 
                   {stage.anomalies > 0 && (
-                    <p className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-warn-soft">
+                    <p className="mt-2 flex items-center gap-1.5 text-[11px] font-medium text-warn-soft">
                       <span className="h-1.5 w-1.5 rounded-full bg-warn" />
                       {t('flow.waiting', { count: stage.anomalies })}
                     </p>
@@ -142,7 +142,7 @@ export function FlowFunnel({
                   />
                   <span
                     className={cn(
-                      'numeric whitespace-nowrap text-[10px] font-medium',
+                      'numeric whitespace-nowrap text-[11px] font-medium',
                       transition.is_bottleneck ? 'text-warn-soft' : 'text-ink-3',
                     )}
                   >
@@ -289,13 +289,13 @@ export function DecisionList({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="numeric text-xs font-semibold text-ink">{decision.subject}</span>
-                <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-ink-2">
+                <span className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-ink-2">
                   <span className={cn('h-1.5 w-1.5 rounded-full', STATE_BG[decision.severity])} />
                   {t(`decision.kind.${decision.kind}` as MessageKey)}
                 </span>
                 {AI_KINDS.has(decision.kind) && (
                   <span
-                    className="inline-flex items-center gap-1 rounded bg-ai/12 px-1.5 py-0.5 text-[10px] font-medium text-ai-soft"
+                    className="inline-flex items-center gap-1 rounded bg-ai/12 px-1.5 py-0.5 text-[11px] font-medium text-ai-soft"
                     title={t('decision.fromAi')}
                   >
                     <Sparkles className="h-3 w-3" strokeWidth={2.2} />
@@ -308,7 +308,7 @@ export function DecisionList({
               {decision.metrics.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
                   {decision.metrics.map((metric) => (
-                    <span key={metric.key} className="text-[10px] text-ink-3">
+                    <span key={metric.key} className="text-[11px] text-ink-3">
                       {t(metric.key as MessageKey)}{' '}
                       <span className="numeric font-semibold text-ink-2">
                         {typeof metric.value === 'number'
@@ -341,7 +341,7 @@ export function DecisionList({
                     : undefined
                 }
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-medium transition-colors',
+                  'inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 rounded-lg px-3 text-[11px] font-medium transition-colors',
                   compact
                     ? 'mt-1.5 text-accent hover:bg-accent/10'
                     : 'mt-2 border border-accent/30 bg-accent-dim text-accent hover:border-accent/60',
@@ -415,7 +415,7 @@ export function ZoneOccupancy({
                 />
               </div>
 
-              <p className="mt-1 flex flex-wrap gap-x-3 text-[10px] text-ink-3">
+              <p className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-ink-3">
                 <span className="numeric">
                   {formatNumber(zone.occupied)} / {formatNumber(zone.capacity)}
                 </span>
@@ -425,7 +425,7 @@ export function ZoneOccupancy({
               </p>
 
               {zone.severity === 'CRITICAL' && (
-                <p className="mt-1 text-[10px] font-medium text-crit-soft">{saturationLabel}</p>
+                <p className="mt-1 text-[11px] font-medium text-crit-soft">{saturationLabel}</p>
               )}
             </Element>
           </li>

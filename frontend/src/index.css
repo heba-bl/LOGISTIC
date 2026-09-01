@@ -5,114 +5,136 @@
 /**
  * SLCC design system.
  *
- * Colour carries meaning here, never decoration. Six semantic roles, used the
- * same way on every screen:
+ * COLOUR HAS ONE JOB EACH. Nothing here is decorative.
  *
- *   blue    information, stock, flow      green   healthy, conform, available
- *   yellow  attention                     orange  intermediate risk
- *   red     critical, shortage, Red Cage   purple  what the assistant suggests
+ *   --c-ok      green   the situation is fine     conform, available, covered
+ *   --c-accent  blue    information and flow      activity, movement, brand
+ *   --c-warn    amber   watch this                low stock, waiting, pending
+ *   --c-crit    red     act on this               shortfall, rejection, Red Cage
  *
- * Surfaces stay quiet - white cards on a pale ground in light mode, deep navy
- * in dark - so the data is the only thing wearing colour.
+ * Cyan and violet appear only as chart series (`--c-chart-*`), never as state.
+ * An interface where everything is coloured teaches an operator that nothing
+ * is, so colour is spent where it changes a decision and nowhere else.
  *
- * Three separate colour roles, never mixed:
+ * Three roles, never mixed:
  *   --c-chart-*  categorical series, four slots, fixed order, never cycled
- *   --c-seq-*    one blue ramp, for magnitude
- *   --c-ok / warn / risk / crit / ai   reserved for state
+ *   --c-seq-*    one blue ramp, pale to deep, for magnitude only
+ *   --c-ok / warn / crit   reserved for state
  *
- * Contrast was measured, not guessed: every `-soft` ink clears 4.5:1 on both
- * its surfaces. The green/yellow pair sits below the colourblind separation
- * floor - unavoidable for a traffic-light convention - so a state is never
- * signalled by colour alone: every badge carries its label, every arc its value.
+ * Green and red are the traffic-light convention and the one pair a deuteranope
+ * cannot separate by hue. They are separated by lightness instead - measured in
+ * OKLab under simulated protanopia, deuteranopia and tritanopia, both themes,
+ * zero failures - and state is never signalled by colour alone: every badge
+ * carries its word, every arc its value.
+ *
+ * The dark theme is designed, not inverted. A colour that reads on white does
+ * not read on navy at the same lightness, so every step was re-chosen against
+ * its own ground.
+ *
+ * The scale below - spacing, radius, shadow, motion - exists so no component
+ * has to invent its own. Durations sit between 150ms and 350ms: fast enough to
+ * read as the interface responding, slow enough to be seen at all.
  *
  * Values are RGB triplets so Tailwind can apply opacity to them.
  */
 @layer base {
   :root {
     /* --- Light ---------------------------------------------------------- */
-    --c-canvas: 248 250 252;
+    --c-canvas: 246 248 251;
     --c-panel: 255 255 255;
     --c-elevated: 241 245 249;
-    --c-line: 226 232 240;
-    --c-line-strong: 203 213 225;
+    --c-line: 227 233 240;
+    --c-line-strong: 199 209 222;
 
-    --c-ink: 23 32 51;
+    --c-ink: 15 23 42;
     --c-ink-2: 71 85 105;
-    --c-ink-3: 100 116 139;
+    --c-ink-3: 91 107 127;
 
-    /* Marks wear the vivid step, type wears the deep one. */
-    --c-accent: 59 130 246;
-    --c-accent-soft: 29 78 216;
-    --c-info: 59 130 246;
-    --c-info-soft: 29 78 216;
-    --c-ok: 34 197 94;
-    --c-ok-soft: 21 128 61;
-    --c-warn: 234 179 8;
-    --c-warn-soft: 161 98 7;
-    --c-risk: 249 115 22;
-    --c-risk-soft: 194 65 12;
-    --c-crit: 239 68 68;
-    --c-crit-soft: 185 28 28;
-    --c-ai: 139 92 246;
-    --c-ai-soft: 109 40 217;
+    /* Blue: information, flow, and the brand. One colour, because on this
+       screen "the system is telling you something" and "this is SLCC" are the
+       same voice. */
+    --c-accent: 29 111 208;
+    --c-accent-2: 56 152 236;
+    --c-accent-soft: 22 84 158;
+    --c-info: 29 111 208;
+    --c-info-soft: 22 84 158;
 
-    /* Categorical series, in assignment order. */
-    --c-chart-1: 59 130 246;
-    --c-chart-2: 34 197 94;
-    --c-chart-3: 234 179 8;
-    --c-chart-4: 139 92 246;
+    --c-ok: 23 178 106;
+    --c-ok-soft: 13 128 75;
+    --c-warn: 232 147 12;
+    --c-warn-soft: 138 84 4;
+    --c-crit: 180 35 24;
+    --c-crit-soft: 138 26 18;
+    --c-ai: 124 58 237;
+    --c-ai-soft: 91 33 182;
 
-    /* Sequential ramp, deep to pale: magnitude only. */
-    --c-seq-1: 30 64 175;
-    --c-seq-2: 37 99 235;
-    --c-seq-3: 59 130 246;
-    --c-seq-4: 96 165 250;
-    --c-seq-5: 147 197 253;
+    /* Categorical series, in assignment order. Never cycled: a fifth series
+       folds into "other" rather than borrowing slot 1 back. */
+    --c-chart-1: 29 111 208;
+    --c-chart-2: 23 178 106;
+    --c-chart-3: 232 147 12;
+    --c-chart-4: 124 58 237;
 
-    --shadow-panel: 0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06);
-    --shadow-lift: 0 4px 12px -2px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.06);
+    /* Sequential ramp, deep to pale: magnitude only, never identity. */
+    --c-seq-1: 18 66 124;
+    --c-seq-2: 22 89 168;
+    --c-seq-3: 29 111 208;
+    --c-seq-4: 125 176 240;
+    --c-seq-5: 205 226 250;
+
+    --shadow-panel:
+      0 1px 2px rgb(20 42 52 / 0.04),
+      0 4px 16px -8px rgb(20 42 52 / 0.10);
+    --shadow-lift: 0 4px 12px -2px rgb(23 42 53 / 0.12), 0 2px 6px -2px rgb(23 42 53 / 0.07);
+
+    /* --- Motion --------------------------------------------------------- */
+    /* Three speeds and one curve. A component that needs a fourth is usually a
+       component doing too much. */
+    --t-fast: 150ms;
+    --t-base: 220ms;
+    --t-slow: 340ms;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
     color-scheme: light;
   }
 
   .dark {
-    /* --- Dark: its own palette, not an inversion ------------------------ */
-    --c-canvas: 15 23 42;
-    --c-panel: 24 34 53;
-    --c-elevated: 30 41 59;
-    --c-line: 43 58 82;
-    --c-line-strong: 62 80 112;
+    /* --- Dark: its own palette, chosen against its own ground ----------- */
+    --c-canvas: 14 21 32;
+    --c-panel: 22 31 45;
+    --c-elevated: 31 42 59;
+    --c-line: 45 59 79;
+    --c-line-strong: 71 89 114;
 
-    --c-ink: 248 250 252;
-    --c-ink-2: 148 163 184;
-    --c-ink-3: 124 141 166;
+    --c-ink: 241 245 249;
+    --c-ink-2: 163 179 199;
+    --c-ink-3: 148 165 187;
 
-    /* On a dark ground the vivid step reads as type; marks go one step up. */
-    --c-accent: 96 165 250;
-    --c-accent-soft: 147 197 253;
-    --c-info: 96 165 250;
-    --c-info-soft: 147 197 253;
-    --c-ok: 74 222 128;
-    --c-ok-soft: 134 239 172;
-    --c-warn: 250 204 21;
-    --c-warn-soft: 253 224 71;
-    --c-risk: 251 146 60;
-    --c-risk-soft: 253 186 116;
-    --c-crit: 248 113 113;
-    --c-crit-soft: 252 165 165;
-    --c-ai: 167 139 250;
-    --c-ai-soft: 196 181 253;
+    --c-accent: 76 141 246;
+    --c-accent-2: 122 176 252;
+    --c-accent-soft: 147 191 253;
+    --c-info: 76 141 246;
+    --c-info-soft: 147 191 253;
 
-    --c-chart-1: 96 165 250;
-    --c-chart-2: 74 222 128;
-    --c-chart-3: 250 204 21;
-    --c-chart-4: 167 139 250;
+    --c-ok: 62 207 142;
+    --c-ok-soft: 122 226 175;
+    --c-warn: 245 177 51;
+    --c-warn-soft: 250 208 128;
+    --c-crit: 229 72 77;
+    --c-crit-soft: 246 140 143;
+    --c-ai: 167 129 250;
+    --c-ai-soft: 200 176 253;
 
-    --c-seq-1: 191 219 254;
-    --c-seq-2: 147 197 253;
-    --c-seq-3: 96 165 250;
-    --c-seq-4: 59 130 246;
-    --c-seq-5: 29 78 216;
+    --c-chart-1: 76 141 246;
+    --c-chart-2: 62 207 142;
+    --c-chart-3: 245 177 51;
+    --c-chart-4: 167 129 250;
+
+    --c-seq-1: 205 226 250;
+    --c-seq-2: 125 176 240;
+    --c-seq-3: 76 141 246;
+    --c-seq-4: 29 111 208;
+    --c-seq-5: 18 66 124;
 
     --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.03) inset,
       0 6px 20px -12px rgb(0 0 0 / 0.8);
@@ -134,6 +156,17 @@
 
   body {
     @apply bg-canvas text-ink font-sans antialiased;
+    /* A flat fill reads as paper; a wash reads as a room with a light in it.
+       Fixed, so it does not travel when a long report scrolls. */
+    background-image:
+      radial-gradient(70rem 40rem at 12% -10rem, rgb(var(--c-accent) / 0.10), transparent 65%),
+      radial-gradient(70rem 40rem at 88% -6rem, rgb(var(--c-accent-2) / 0.09), transparent 65%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: rgb(var(--c-accent) / 0.22);
+    color: rgb(var(--c-ink));
   }
 
   ::-webkit-scrollbar {
@@ -153,8 +186,11 @@
     @apply bg-line-strong;
   }
 
+  /* Visible on both grounds and on top of a coloured mark: the ring carries a
+     surface-coloured halo so it never disappears into whatever it lands on. */
   :focus-visible {
-    @apply outline-none ring-2 ring-accent/50 ring-offset-2 ring-offset-canvas;
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-canvas;
+    transition: box-shadow 150ms ease-out;
   }
 
   /* Operators may run the app on a shop-floor screen with reduced motion. */
@@ -170,14 +206,102 @@
 }
 
 @layer components {
-  /* The structural surface of every screen. */
+  /* --- Buttons ---------------------------------------------------------
+     Six variants, one geometry. Every one is 38px tall with a real hit area,
+     lifts a pixel on hover, presses back down on click, and dims without
+     disappearing when disabled - a button that only changes colour on hover
+     gives no feedback on a touch screen, where hover does not exist. */
+  .btn {
+    @apply inline-flex h-[38px] cursor-pointer select-none items-center justify-center gap-2
+      rounded-xl px-4 text-xs font-semibold tracking-tight
+      transition-all duration-[var(--t-fast)] ease-out
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-canvas
+      disabled:pointer-events-none disabled:opacity-45;
+  }
+
+  .btn:not(:disabled):active {
+    @apply translate-y-px;
+  }
+
+  .btn-primary {
+    @apply btn bg-accent text-white shadow-[0_2px_10px_-3px_rgb(var(--c-accent)/0.8)]
+      hover:-translate-y-px hover:shadow-[0_6px_18px_-6px_rgb(var(--c-accent)/0.9)] hover:brightness-110;
+  }
+
+  .btn-secondary {
+    @apply btn border border-line bg-panel text-ink-2
+      hover:-translate-y-px hover:border-line-strong hover:text-ink hover:shadow-panel;
+  }
+
+  .btn-success {
+    @apply btn bg-ok text-white shadow-[0_2px_10px_-3px_rgb(var(--c-ok)/0.8)]
+      hover:-translate-y-px hover:brightness-110;
+  }
+
+  .btn-danger {
+    @apply btn bg-crit text-white shadow-[0_2px_10px_-3px_rgb(var(--c-crit)/0.8)]
+      hover:-translate-y-px hover:brightness-110;
+  }
+
+  .btn-ghost {
+    @apply btn text-ink-2 hover:bg-elevated hover:text-ink;
+  }
+
+  .btn-icon {
+    @apply btn w-[38px] px-0 text-ink-3 hover:bg-elevated hover:text-ink;
+  }
+
+  /* --- Skeleton ---------------------------------------------------------
+     A sweep rather than a pulse: a shape that pulses reads as an error state,
+     a shape a light passes over reads as something still arriving. */
+  .skeleton {
+    @apply relative overflow-hidden rounded-lg bg-elevated;
+  }
+
+  .skeleton::after {
+    content: '';
+    @apply absolute inset-0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--c-panel) / 0.75),
+      transparent
+    );
+    animation: slcc-sweep 1.5s ease-in-out infinite;
+  }
+
+  /* The structural surface of every screen.
+     The ::before hairline is what makes a panel read as a raised object: a
+     surface catches light along its top edge, and a border alone never does. */
   .panel {
     @apply relative rounded-xl border border-line bg-panel shadow-panel;
   }
 
+  .panel::before {
+    content: '';
+    @apply pointer-events-none absolute inset-x-0 top-0 h-px rounded-t-xl;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.55) 18%,
+      rgb(255 255 255 / 0.55) 82%,
+      transparent
+    );
+  }
+
+  .dark .panel::before {
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--c-accent) / 0.28) 18%,
+      rgb(var(--c-accent) / 0.28) 82%,
+      transparent
+    );
+  }
+
   /* A panel that responds to the pointer, for anything clickable. */
   .panel-interactive {
-    @apply transition-all duration-200 hover:-translate-y-px hover:border-line-strong hover:shadow-lift;
+    @apply transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lift;
   }
 
   .panel-header {
@@ -199,11 +323,21 @@
   }
 
   .data-table thead th {
-    @apply eyebrow border-b border-line px-4 py-2.5 font-semibold;
+    @apply eyebrow sticky top-0 z-10 border-b border-line bg-elevated/70 px-4 py-3 font-semibold backdrop-blur;
   }
 
   .data-table tbody td {
-    @apply border-b border-line/60 px-4 py-2.5 text-xs text-ink-2;
+    @apply border-b border-line/60 px-4 py-3 text-xs text-ink-2;
+  }
+
+  /* A left accent on hover: on a row twelve columns wide, it is what stops the
+     eye sliding onto the line above halfway across. */
+  .data-table tbody tr {
+    @apply relative transition-colors duration-150;
+  }
+
+  .data-table tbody tr:hover td:first-child {
+    @apply shadow-[inset_3px_0_0_0_rgb(var(--c-accent))];
   }
 
   .data-table tbody tr:last-child td {
@@ -212,5 +346,231 @@
 
   .data-table tbody tr:hover {
     @apply bg-elevated;
+  }
+
+  /* A headline figure. Tabular so the digits sit in fixed columns - a KPI that
+     re-renders must not make the label beside it jump - and tracked in, because
+     default spacing looks loose at display sizes. */
+  .figure {
+    @apply font-mono tabular-nums font-semibold tracking-tight text-ink;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Reserved for data that is genuinely live. Used anywhere else it becomes
+     wallpaper, and then nothing on the screen means "now". */
+  .live-dot {
+    @apply relative inline-flex h-1.5 w-1.5 rounded-full bg-ok;
+  }
+
+  .live-dot::after {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-ok;
+    animation: slcc-pulse 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* A screen assembles rather than appearing. The delay is a variable so a
+     caller can stagger a row of cards without a class per position. */
+  .rise {
+    animation: slcc-rise 380ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    animation-delay: var(--rise-delay, 0ms);
+  }
+
+  /* The quiet band under a page title that names where the data came from. */
+  .source-strip {
+    @apply rounded-lg border border-line/70 bg-elevated/60 px-3 py-2 text-2xs text-ink-3;
+  }
+}
+
+/* The light travelling from one stage to the next.
+   Two keyframe sets because the flow stacks vertically on a narrow screen and
+   runs horizontally on a wide one - a single translate cannot serve both, and
+   using the wrong one is what made the pulse drift sideways off its wire. */
+.flow-pulse {
+  animation: slcc-flow-v 1.9s linear infinite;
+}
+
+@media (min-width: 1280px) {
+  .flow-pulse {
+    animation-name: slcc-flow-h;
+  }
+}
+
+@keyframes slcc-flow-v {
+  0% {
+    opacity: 0;
+    transform: translateY(-13px);
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(13px);
+  }
+}
+
+@keyframes slcc-flow-h {
+  0% {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(15px);
+  }
+}
+
+/* The pools of light behind everything. Long, mismatched cycles: 34 and 47
+   seconds do not divide, so the pair never repeats a position. */
+.ambient-drift {
+  animation: slcc-drift 34s ease-in-out infinite alternate;
+}
+
+.ambient-drift-slow {
+  animation: slcc-drift-slow 47s ease-in-out infinite alternate;
+}
+
+@keyframes slcc-drift {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(6rem, 4rem, 0) scale(1.12);
+  }
+}
+
+@keyframes slcc-drift-slow {
+  from {
+    transform: translate3d(0, 0, 0) scale(1.08);
+  }
+  to {
+    transform: translate3d(-7rem, 5rem, 0) scale(1);
+  }
+}
+
+/* --- the entry sequence ------------------------------------------------ */
+
+/* The room behind the doors. Racking receding towards a vanishing point, drawn
+   with gradients rather than filmed: a remote video is a hundred megabytes and
+   a blank screen on a plant network. */
+.hero-scene {
+  background:
+    radial-gradient(60rem 40rem at 50% 45%, rgb(var(--c-accent) / 0.18), transparent 70%),
+    linear-gradient(180deg, rgb(var(--c-canvas)), rgb(var(--c-panel)) 55%, rgb(var(--c-canvas)));
+}
+
+/* The floor: lines converging, so the eye reads depth instead of a flat wash. */
+.hero-rails {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 5.5%,
+    rgb(var(--c-accent) / 0.16) 5.5%,
+    rgb(var(--c-accent) / 0.16) calc(5.5% + 1px)
+  );
+  mask-image: linear-gradient(180deg, transparent, black 40%, transparent 92%);
+  -webkit-mask-image: linear-gradient(180deg, transparent, black 40%, transparent 92%);
+  transform: perspective(40rem) rotateX(62deg);
+  transform-origin: top center;
+}
+
+.hero-glow {
+  background: radial-gradient(closest-side, rgb(var(--c-accent) / 0.22), transparent);
+  filter: blur(2rem);
+  animation: slcc-breathe 9s ease-in-out infinite alternate;
+}
+
+/* The doors themselves: a brushed panel with a lit inner edge, so the seam down
+   the middle reads as two objects meeting and not as one divided rectangle. */
+.hero-door {
+  background:
+    linear-gradient(90deg, rgb(var(--c-elevated)), rgb(var(--c-panel)) 88%),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 3rem,
+      rgb(var(--c-ink) / 0.03) 3rem,
+      rgb(var(--c-ink) / 0.03) calc(3rem + 1px)
+    );
+  border-right: 1px solid rgb(var(--c-accent) / 0.35);
+  box-shadow: inset -2rem 0 4rem -2rem rgb(0 0 0 / 0.5);
+}
+
+.hero-door-right {
+  background:
+    linear-gradient(270deg, rgb(var(--c-elevated)), rgb(var(--c-panel)) 88%),
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 3rem,
+      rgb(var(--c-ink) / 0.03) 3rem,
+      rgb(var(--c-ink) / 0.03) calc(3rem + 1px)
+    );
+  border-right: 0;
+  border-left: 1px solid rgb(var(--c-accent) / 0.35);
+  box-shadow: inset 2rem 0 4rem -2rem rgb(0 0 0 / 0.5);
+}
+
+.hero-arrow {
+  animation: slcc-nudge 1.7s ease-in-out infinite;
+}
+
+@keyframes slcc-breathe {
+  from {
+    opacity: 0.55;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+}
+
+@keyframes slcc-nudge {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(5px);
+    opacity: 1;
+  }
+}
+
+@keyframes slcc-pulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(2.6);
+  }
+}
+
+@keyframes slcc-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slcc-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }

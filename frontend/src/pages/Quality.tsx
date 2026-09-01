@@ -1,384 +1,319 @@
-import { useState } from 'react'
-import { Ban, CheckCircle2, ShieldAlert, ShieldCheck, Trash2 } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { ShieldAlert, ShieldCheck } from 'lucide-react'
 
 import { PageHeader } from '@/components/PageHeader'
+import { Badge, EmptyState, ErrorPanel, LoadingPanel } from '@/components/ui'
+import { ChartCard } from '@/features/analytics/primitives'
+import { HBarChart } from '@/features/analytics/bars'
+import { Waterfall } from '@/features/analytics/series'
 import {
-  Badge,
-  Button,
-  EmptyState,
-  ErrorPanel,
-  Field,
-  Input,
-  LoadingPanel,
-  Modal,
-  Panel,
-  Textarea,
-} from '@/components/ui'
+  FilterBar,
+  KpiRow,
+  ReportTable,
+  SourceNote,
+  matches,
+  useFilterState,
+  type SupervisionKpi,
+} from '@/features/supervision/shell'
 import { LotDetailDrawer } from '@/features/traceability/LotDetailDrawer'
-import { useActor, useApiResource, useToast } from '@/hooks'
+import { useApiResource } from '@/hooks'
 import { useI18n } from '@/i18n/I18nProvider'
-import { toErrorMessage } from '@/services/apiClient'
 import { qualityApi } from '@/services/slcc.service'
-import { formatNumber, formatTimestamp } from '@/utils/format'
-import { lotStatusSeverity } from '@/utils/status'
-import type { Lot } from '@/types/domain'
-
-type Decision = 'approve' | 'reject' | 'scrap'
-
-const DECISION_META: Record<Decision, { title: string; verb: string; variant: 'success' | 'danger' }> =
-  {
-    approve: { title: 'Approve the lot', verb: 'Approve', variant: 'success' },
-    reject: { title: 'Reject the lot', verb: 'Reject', variant: 'danger' },
-    scrap: { title: 'Scrap the lot', verb: 'Scrap', variant: 'danger' },
-  }
+import { blockingReason } from '@/utils/blocking'
+import { formatTimestamp } from '@/utils/format'
 
 /**
- * Quality and Red Cage.
+ * Quality and Red Cage, as the logistics manager sees it.
  *
- * The Red Cage is the quarantine where a lot waits for a decision, whether it
- * failed inspection or arrived outside the quantity tolerance. Approving a lot
- * unlocks storage — it does not create stock.
+ * The decisions were taken by the quality chief in the workbook. What this
+ * screen answers is what those decisions cost: how much is immobilised, for
+ * how long, and on which references it keeps happening.
  */
 export default function Quality() {
-  const { ts } = useI18n()
-  const pending = useApiResource(() => qualityApi.pending(), [])
-  const redCage = useApiResource(() => qualityApi.redCage(), [])
-  const history = useApiResource(() => qualityApi.history(40), [])
-
-  const [decision, setDecision] = useState<{ lot: Lot; kind: Decision } | null>(null)
+  const { t, ts, formatNumber } = useI18n()
+  const redCage = useApiResource(() => qualityApi.redCage(), [], { pollMs: 60_000 })
+  const pending = useApiResource(() => qualityApi.pending(), [], { pollMs: 60_000 })
+  const history = useApiResource(() => qualityApi.history(300), [], { pollMs: 60_000 })
   const [selectedLotId, setSelectedLotId] = useState<number | null>(null)
 
-  function refreshAll() {
-    void pending.refresh()
-    void redCage.refresh()
-    void history.refresh()
-  }
+  const filters = useFilterState(['decision'])
+  const rows = history.data ?? []
+  const blocked = redCage.data ?? []
+
+  const visible = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          matches(
+            [row.justification, row.decided_by?.full_name, String(row.lot_id)],
+            filters.search,
+          ) && (!filters.values.decision || row.decision === filters.values.decision),
+      ),
+    [rows, filters.search, filters.values.decision],
+  )
+
+  const summary = useMemo(() => {
+    const count = (decision: string) => rows.filter((row) => row.decision === decision).length
+    return {
+      approved: count('APPROVED'),
+      rejected: count('REJECTED'),
+      redCage: count('RED_CAGE'),
+      scrapped: count('SCRAPPED'),
+      blockedUnits: blocked.reduce((sum, lot) => sum + lot.quantity_received, 0),
+    }
+  }, [rows, blocked])
+
+  const kpis: SupervisionKpi[] = [
+    {
+      key: 'decisions',
+      label: t('qual.history'),
+      value: formatNumber(rows.length),
+      hint: t('qual.kpi.approvedShare', {
+        percent: rows.length ? Math.round((summary.approved / rows.length) * 100) : 0,
+      }),
+      severity: 'INFO',
+    },
+    {
+      key: 'redcage',
+      label: t('qual.redCage'),
+      value: formatNumber(blocked.length),
+      hint: t('qual.kpi.blockedUnits', { value: formatNumber(summary.blockedUnits) }),
+      severity: blocked.length ? 'CRITICAL' : 'OK',
+    },
+    {
+      key: 'pending',
+      label: t('qual.pending'),
+      value: formatNumber(pending.data?.length ?? 0),
+      hint: t('qual.kpi.awaiting'),
+      severity: (pending.data?.length ?? 0) > 5 ? 'WARNING' : 'INFO',
+    },
+    {
+      key: 'scrapped',
+      label: t('status.REJECTED'),
+      value: formatNumber(summary.rejected + summary.scrapped),
+      hint: t('qual.kpi.neverStock'),
+      severity: summary.rejected + summary.scrapped ? 'WARNING' : 'OK',
+    },
+  ]
+
+  /**
+   * How long the blocked lots have been waiting.
+   *
+   * The count of blocked lots says there is a problem; the age says how badly.
+   * A lot stuck three days is a decision nobody took, and that is the line a
+   * manager chases.
+   */
+  const ageing = useMemo(() => {
+    const buckets = [
+      { key: 'lt24', label: t('qual.age.lt24'), max: 24, severity: 'OK' as const },
+      { key: 'd1to3', label: t('qual.age.d1to3'), max: 72, severity: 'WARNING' as const },
+      { key: 'gt3', label: t('qual.age.gt3'), max: Infinity, severity: 'CRITICAL' as const },
+    ]
+    const now = Date.now()
+    const counts = new Map(buckets.map((bucket) => [bucket.key, 0]))
+    for (const lot of blocked) {
+      const stamp = lot.updated_at ?? lot.received_at
+      const hours = (now - new Date(stamp).getTime()) / 3_600_000
+      const bucket = buckets.find((item) => hours < item.max) ?? buckets[buckets.length - 1]
+      counts.set(bucket.key, (counts.get(bucket.key) ?? 0) + 1)
+    }
+    return buckets.map((bucket) => ({
+      key: bucket.key,
+      label: bucket.label,
+      value: counts.get(bucket.key) ?? 0,
+      severity: bucket.severity,
+    }))
+  }, [blocked, t])
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Quality"
-        description="Validation gate before storage, and Red Cage quarantine management."
-      />
+      <PageHeader title={t('qual.title')} description={t('qual.supervisionSubtitle')} />
+      <SourceNote zone="nav.quality" />
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        {/* Awaiting decision */}
-        <Panel
-          title="Awaiting quality decision"
-          subtitle={`${pending.data?.length ?? 0} inspected lots`}
-          bodyClassName=""
-          action={<ShieldCheck className="h-3.5 w-3.5 text-ink-3" />}
-        >
-          {pending.initialLoading ? (
-            <LoadingPanel rows={3} />
-          ) : pending.error ? (
-            <ErrorPanel message={pending.error} onRetry={pending.refresh} />
-          ) : (pending.data?.length ?? 0) === 0 ? (
-            <EmptyState
-              icon={<CheckCircle2 className="h-5 w-5 text-ok" />}
-              title="No pending decision"
-              description="Every inspected lot has been decided."
-            />
-          ) : (
-            <ul className="divide-y divide-line">
-              {pending.data?.map((lot) => (
-                <li key={lot.id} className="px-5 py-3.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedLotId(lot.id)}
-                      className="numeric text-xs font-medium text-ink hover:text-accent"
-                    >
-                      {lot.lot_number}
-                    </button>
-                    <Badge severity={lotStatusSeverity[lot.status]}>
-                      {ts(lot.status)}
-                    </Badge>
-                    <span className="numeric ml-auto text-2xs text-ink-3">
-                      {formatNumber(lot.quantity_received)} {lot.part.unit}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-2xs text-ink-3">
-                    {lot.part.reference} · {lot.supplier.name}
-                  </p>
-                  <div className="mt-2.5 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="success"
-                      icon={<CheckCircle2 className="h-3 w-3" />}
-                      onClick={() => setDecision({ lot, kind: 'approve' })}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      icon={<Ban className="h-3 w-3" />}
-                      onClick={() => setDecision({ lot, kind: 'reject' })}
-                    >
-                      Reject
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
+      {history.initialLoading ? (
+        <div className="panel">
+          <LoadingPanel rows={6} />
+        </div>
+      ) : history.error ? (
+        <div className="panel">
+          <ErrorPanel message={history.error} onRetry={history.refresh} />
+        </div>
+      ) : (
+        <>
+          <KpiRow items={kpis} />
 
-        {/* Red Cage */}
-        <Panel
-          title="Red Cage"
-          subtitle={`${redCage.data?.length ?? 0} quarantined lots`}
-          bodyClassName=""
-          action={<ShieldAlert className="h-3.5 w-3.5 text-crit" />}
-        >
-          {redCage.initialLoading ? (
-            <LoadingPanel rows={3} />
-          ) : (redCage.data?.length ?? 0) === 0 ? (
-            <EmptyState
-              icon={<CheckCircle2 className="h-5 w-5 text-ok" />}
-              title="Red Cage empty"
-              description="No lot is blocked."
-            />
-          ) : (
-            <ul className="divide-y divide-line">
-              {redCage.data?.map((lot) => (
-                <li key={lot.id} className="px-5 py-3.5">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedLotId(lot.id)}
-                      className="numeric text-xs font-medium text-ink hover:text-accent"
-                    >
-                      {lot.lot_number}
-                    </button>
-                    <Badge severity="crit">Red Cage</Badge>
-                    <span className="numeric ml-auto text-2xs text-ink-3">
-                      {formatNumber(lot.quantity_received)} {lot.part.unit}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-2xs text-ink-3">
-                    {lot.part.reference} · {lot.supplier.name}
-                  </p>
-                  {lot.blocked_reason && (
-                    <p className="mt-2 rounded border border-crit/25 bg-crit/5 px-2.5 py-1.5 text-2xs leading-relaxed text-ink-2">
-                      {lot.blocked_reason}
-                    </p>
-                  )}
-                  <div className="mt-2.5 flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="success"
-                      icon={<CheckCircle2 className="h-3 w-3" />}
-                      onClick={() => setDecision({ lot, kind: 'approve' })}
-                    >
-                      Release (derogation)
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      icon={<Trash2 className="h-3 w-3" />}
-                      onClick={() => setDecision({ lot, kind: 'scrap' })}
-                    >
-                      Scrap
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </div>
+          <div className="grid gap-4 xl:grid-cols-2">
+            {/* A waterfall, not a pie. What leaves the quality gate is a flow:
+                the lots inspected go in, the blocked and the rejected are
+                subtracted, and what remains is what will become stock. Drawing
+                the approvals as a subtraction - which is what a plain
+                decomposition would do - would paint the good outcome as a
+                loss. */}
+            <ChartCard
+              title={t('qual.chart.decisions')}
+              question={t('qual.chart.decisionsQuestion')}
+            >
+              <Waterfall
+                steps={[
+                  { key: 'inspected', value: rows.length, kind: 'START' },
+                  { key: 'redCageStep', value: -summary.redCage, kind: 'OUT' },
+                  {
+                    key: 'rejectedStep',
+                    value: -(summary.rejected + summary.scrapped),
+                    kind: 'OUT',
+                  },
+                  { key: 'approvedStep', value: summary.approved, kind: 'END' },
+                ]}
+                emptyMessage={t('qual.noHistory')}
+                labelFor={(key) => t(`qual.step.${key}` as never) as string}
+              />
+            </ChartCard>
 
-      <Panel
-        title="Decision history"
-        subtitle="Every decision carries its justification"
-        bodyClassName=""
-      >
-        {history.initialLoading ? (
-          <LoadingPanel rows={4} />
-        ) : (history.data?.length ?? 0) === 0 ? (
-          <EmptyState title="No decision recorded" />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-line">
-                  <th className="eyebrow px-5 py-2.5 font-semibold">Lot</th>
-                  <th className="eyebrow px-5 py-2.5 font-semibold">Decision</th>
-                  <th className="eyebrow px-5 py-2.5 text-right font-semibold">Approved</th>
-                  <th className="eyebrow px-5 py-2.5 font-semibold">Justification</th>
-                  <th className="eyebrow px-5 py-2.5 font-semibold">By</th>
-                  <th className="eyebrow px-5 py-2.5 text-right font-semibold">Date</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.data?.map((validation) => (
-                  <tr key={validation.id} className="border-b border-line/60 last:border-0">
-                    <td
-                      className="numeric cursor-pointer px-5 py-3 text-xs text-ink hover:text-accent"
-                      onClick={() => setSelectedLotId(validation.lot_id)}
-                    >
-                      #{validation.lot_id}
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge
-                        severity={
-                          validation.decision === 'APPROVED'
-                            ? 'ok'
-                            : validation.decision === 'RED_CAGE'
-                              ? 'warn'
-                              : 'crit'
-                        }
-                      >
-                        {ts(validation.decision)}
-                      </Badge>
-                    </td>
-                    <td className="numeric px-5 py-3 text-right text-xs text-ink-2">
-                      {formatNumber(validation.quantity_approved)}
-                    </td>
-                    <td className="max-w-xs px-5 py-3 text-2xs text-ink-3">
-                      {validation.justification}
-                    </td>
-                    <td className="px-5 py-3 text-2xs text-ink-2">
-                      {validation.decided_by?.full_name ?? 'system'}
-                    </td>
-                    <td className="numeric px-5 py-3 text-right text-2xs text-ink-3">
-                      {formatTimestamp(validation.decided_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {/* How long a lot has been stuck: the question a manager acts on. */}
+            <ChartCard
+              title={t('qual.chart.ageing')}
+              question={t('qual.chart.ageingQuestion')}
+              delay={0.05}
+            >
+              <HBarChart
+                points={ageing}
+                unit={` ${t('recv.col.lot').toLowerCase()}`}
+                colouring="state"
+                emptyMessage={t('qual.redCageEmptyHint')}
+              />
+            </ChartCard>
           </div>
-        )}
-      </Panel>
 
-      {decision && (
-        <DecisionDialog
-          lot={decision.lot}
-          kind={decision.kind}
-          onClose={() => setDecision(null)}
-          onDone={() => {
-            setDecision(null)
-            refreshAll()
-          }}
-        />
+          {/* What is immobilised right now, and why. */}
+          <ChartCard
+            title={t('qual.redCage')}
+            question={t('qual.redCageQuestion')}
+            action={<ShieldAlert className="h-3.5 w-3.5 text-crit" />}
+            bodyClassName="px-0 pb-0"
+            delay={0.08}
+          >
+            <ReportTable
+              minWidth={860}
+              columns={[
+                { key: 'lot', label: t('recv.col.lot') },
+                { key: 'part', label: t('recv.col.part') },
+                { key: 'supplier', label: t('recv.col.supplier') },
+                { key: 'quantity', label: t('common.quantity'), align: 'right' },
+                { key: 'reason', label: t('qual.blockingReason') },
+              ]}
+              empty={
+                blocked.length === 0 ? (
+                  <div className="px-5 pb-5">
+                    <EmptyState
+                      icon={<ShieldCheck className="h-5 w-5 text-ok" />}
+                      title={t('qual.redCageEmpty')}
+                      description={t('qual.redCageEmptyHint')}
+                    />
+                  </div>
+                ) : undefined
+              }
+            >
+              {blocked.map((lot) => (
+                <tr key={lot.id} onClick={() => setSelectedLotId(lot.id)} className="cursor-pointer">
+                  <td className="numeric font-medium text-ink">{lot.lot_number}</td>
+                  <td>
+                    <span className="numeric">{lot.part.reference}</span>
+                    <span className="block truncate text-2xs text-ink-3">
+                      {lot.part.designation}
+                    </span>
+                  </td>
+                  <td>{lot.supplier.name}</td>
+                  <td className="numeric text-right">{formatNumber(lot.quantity_received)}</td>
+                  <td className="max-w-md text-2xs">{blockingReason(lot, t)}</td>
+                </tr>
+              ))}
+            </ReportTable>
+          </ChartCard>
+
+          <FilterBar
+            search={filters.search}
+            onSearch={filters.setSearch}
+            placeholder={t('qual.searchPlaceholder')}
+            count={t('common.rowsShown', {
+              shown: formatNumber(visible.length),
+              total: formatNumber(rows.length),
+            })}
+            onReset={filters.reset}
+            selects={[
+              {
+                key: 'decision',
+                label: t('qual.col.decision'),
+                value: filters.values.decision,
+                onChange: (value) => filters.set('decision', value),
+                options: ['APPROVED', 'RED_CAGE', 'REJECTED', 'SCRAPPED'].map((value) => ({
+                  value,
+                  label: ts(value),
+                })),
+              },
+            ]}
+          />
+
+          <ChartCard
+            title={t('qual.history')}
+            question={t('qual.historyQuestion')}
+            bodyClassName="px-0 pb-0"
+            delay={0.11}
+          >
+            <ReportTable
+              minWidth={860}
+              columns={[
+                { key: 'lot', label: t('recv.col.lot') },
+                { key: 'decision', label: t('qual.col.decision') },
+                { key: 'approved', label: t('qual.col.approved'), align: 'right' },
+                { key: 'justification', label: t('qual.col.justification') },
+                { key: 'by', label: t('qual.col.by') },
+                { key: 'date', label: t('common.date'), align: 'right' },
+              ]}
+              empty={
+                visible.length === 0 ? (
+                  <div className="px-5 pb-5">
+                    <EmptyState
+                      title={t('qual.noHistory')}
+                      description={t('recv.emptyFiltered')}
+                    />
+                  </div>
+                ) : undefined
+              }
+            >
+              {visible.map((row) => (
+                <tr
+                  key={row.id}
+                  onClick={() => setSelectedLotId(row.lot_id)}
+                  className="cursor-pointer"
+                >
+                  <td className="numeric">#{row.lot_id}</td>
+                  <td>
+                    <Badge
+                      severity={
+                        row.decision === 'APPROVED'
+                          ? 'ok'
+                          : row.decision === 'RED_CAGE'
+                            ? 'warn'
+                            : 'crit'
+                      }
+                    >
+                      {ts(row.decision)}
+                    </Badge>
+                  </td>
+                  <td className="numeric text-right">{formatNumber(row.quantity_approved)}</td>
+                  <td className="max-w-sm text-2xs">{row.justification}</td>
+                  <td className="text-2xs">{row.decided_by?.full_name ?? '—'}</td>
+                  <td className="numeric text-right text-2xs text-ink-3">
+                    {formatTimestamp(row.decided_at)}
+                  </td>
+                </tr>
+              ))}
+            </ReportTable>
+          </ChartCard>
+        </>
       )}
 
       <LotDetailDrawer lotId={selectedLotId} onClose={() => setSelectedLotId(null)} />
     </div>
-  )
-}
-
-function DecisionDialog({
-  lot,
-  kind,
-  onClose,
-  onDone,
-}: {
-  lot: Lot
-  kind: Decision
-  onClose: () => void
-  onDone: () => void
-}) {
-  const { byRole, actorId } = useActor()
-  const toast = useToast()
-  const manager = byRole('QUALITY_MANAGER')
-
-  const [justification, setJustification] = useState('')
-  const [quantity, setQuantity] = useState(String(lot.quantity_received))
-  const [saving, setSaving] = useState(false)
-
-  const meta = DECISION_META[kind]
-
-  async function submit() {
-    if (justification.trim().length < 3) {
-      toast.error('Justification required', 'A quality decision is never recorded without a reason.')
-      return
-    }
-    setSaving(true)
-    const payload = {
-      justification,
-      actor_id: manager?.id ?? actorId,
-      quantity_approved: kind === 'approve' ? Number(quantity) : undefined,
-    }
-    try {
-      if (kind === 'approve') {
-        await qualityApi.approve(lot.id, payload)
-        toast.success(
-          `${lot.lot_number} approved`,
-          'Storage is now unlocked. Stock is still unchanged until the warehouse confirms.',
-        )
-      } else if (kind === 'reject') {
-        await qualityApi.reject(lot.id, payload)
-        toast.info(`${lot.lot_number} rejected`, 'The lot will never become stock.')
-      } else {
-        await qualityApi.scrap(lot.id, payload)
-        toast.info(`${lot.lot_number} scrapped`, 'Terminal decision recorded in the audit trail.')
-      }
-      onDone()
-    } catch (error) {
-      toast.error('Decision refused', toErrorMessage(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={meta.title}
-      subtitle={`${lot.lot_number} · ${lot.part.reference} · ${formatNumber(lot.quantity_received)} units`}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant={meta.variant} loading={saving} onClick={() => void submit()}>
-            {meta.verb}
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {kind === 'approve' && (
-          <Field
-            label="Approved quantity"
-            required
-            hint="May be lower than the received quantity in case of a partial derogation"
-          >
-            <Input
-              type="number"
-              min={1}
-              max={lot.quantity_received}
-              value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
-            />
-          </Field>
-        )}
-
-        <Field
-          label="Justification"
-          required
-          hint="Recorded in the audit trail and visible in the lot history"
-        >
-          <Textarea
-            value={justification}
-            onChange={(event) => setJustification(event.target.value)}
-            placeholder="Sample conform, no functional impact…"
-            rows={4}
-          />
-        </Field>
-
-        {lot.blocked_reason && (
-          <div className="rounded-lg border border-line bg-elevated/60 px-3 py-2.5">
-            <p className="eyebrow">Recorded blocking reason</p>
-            <p className="mt-1 text-xs leading-relaxed text-ink-2">{lot.blocked_reason}</p>
-          </div>
-        )}
-      </div>
-    </Modal>
   )
 }

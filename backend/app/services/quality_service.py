@@ -98,6 +98,8 @@ def approve(
     lot.status = LotStatus.APPROVED
     lot.quantity_approved = quantity
     lot.blocked_reason = None
+    lot.blocked_reason_key = None
+    lot.blocked_reason_values = None
     db.flush()
 
     validation = _decide(
@@ -132,6 +134,8 @@ def reject(
     lot.status = LotStatus.REJECTED
     lot.quantity_approved = 0
     lot.blocked_reason = justification
+    lot.blocked_reason_key = None
+    lot.blocked_reason_values = None
     db.flush()
 
     return _decide(
@@ -160,6 +164,8 @@ def send_to_red_cage(
 
     lot.status = LotStatus.RED_CAGE
     lot.blocked_reason = justification
+    lot.blocked_reason_key = None
+    lot.blocked_reason_values = None
     db.flush()
 
     return _decide(
@@ -186,6 +192,8 @@ def scrap(
     lot.status = LotStatus.REJECTED
     lot.quantity_approved = 0
     lot.blocked_reason = f"Scrapped: {justification}"
+    lot.blocked_reason_key = None
+    lot.blocked_reason_values = None
     db.flush()
 
     return _decide(

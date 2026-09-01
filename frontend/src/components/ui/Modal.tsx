@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
 
+import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/utils/cn'
 
 interface ModalProps {
@@ -26,6 +27,7 @@ export function Modal({
   footer,
   width = 'md',
 }: ModalProps) {
+  const { t } = useI18n()
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
@@ -73,7 +75,7 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 className="shrink-0 rounded p-1 text-ink-3 transition-colors hover:bg-elevated hover:text-ink"
-                aria-label="Close"
+                aria-label={t('common.close')}
               >
                 <X className="h-4 w-4" />
               </button>

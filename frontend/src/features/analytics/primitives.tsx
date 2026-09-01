@@ -47,16 +47,18 @@ export function ChartCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay, ease: [0.22, 1, 0.36, 1] }}
-      className={cn('panel flex flex-col', className)}
+      className={cn('panel panel-interactive flex flex-col', className)}
     >
-      <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
+      {/* The title block sits on its own tinted band. A chart's question is a
+          caption, and without a ground of its own it reads as more content. */}
+      <header className="flex items-start justify-between gap-3 rounded-t-xl border-b border-line bg-elevated/40 px-5 py-3.5">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold tracking-tight text-ink">{title}</h2>
           {question && <p className="mt-0.5 text-2xs text-ink-3">{question}</p>}
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </header>
-      <div className={cn('flex-1 px-5 pb-5', bodyClassName)}>{children}</div>
+      <div className={cn('flex-1 px-5 pb-5 pt-4', bodyClassName)}>{children}</div>
       {footer && (
         <footer className="border-t border-line px-5 py-2.5 text-2xs text-ink-3">{footer}</footer>
       )}
@@ -180,7 +182,7 @@ export function RiskChip({ risk, label }: { risk: Severity4; label?: string }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-medium',
+        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium',
         STATE_BORDER[risk],
         STATE_TEXT[risk],
       )}
@@ -211,7 +213,7 @@ export function ChartTooltip({
       <p className="text-2xs font-semibold text-ink">{title}</p>
       <ul className="mt-1 space-y-0.5">
         {rows.map((row) => (
-          <li key={row.label} className="flex items-baseline justify-between gap-3 text-[10px]">
+          <li key={row.label} className="flex items-baseline justify-between gap-3 text-[11px]">
             <span className="text-ink-3">{row.label}</span>
             <span className={cn('numeric font-medium text-ink-2', row.className)}>
               {row.value}

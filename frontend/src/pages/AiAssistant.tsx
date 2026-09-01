@@ -13,11 +13,12 @@ import {
 import { LogisticsCopilot } from '@/features/mission-control'
 import { StatTile } from '@/features/analytics/charts'
 import { useApiResource } from '@/hooks'
+import { useI18n } from '@/i18n/I18nProvider'
 import { aiApi } from '@/services/slcc.service'
 import { cn } from '@/utils/cn'
-import { formatNumber } from '@/utils/format'
 import { prioritySeverity, riskSeverity, toSeverity } from '@/utils/status'
-import type { RecommendationKind } from '@/types/domain'
+import type { MessageKey } from '@/i18n/messages'
+import type { Recommendation, RecommendationKind } from '@/types/domain'
 
 const KIND_ICON: Record<RecommendationKind, typeof Brain> = {
   SHORTAGE_RISK: TrendingDown,
@@ -27,12 +28,43 @@ const KIND_ICON: Record<RecommendationKind, typeof Brain> = {
   OPTIMIZATION: Lightbulb,
 }
 
-const KIND_LABEL: Record<RecommendationKind, string> = {
-  SHORTAGE_RISK: 'Shortage risk',
-  PRIORITY: 'Priority',
-  BLOCKED_LOT: 'Blocked lot',
-  WAREHOUSE_SATURATION: 'Saturation',
-  OPTIMIZATION: 'Optimisation',
+//: The backend sends a kind; the wording is the interface's business.
+const KIND_KEY: Record<RecommendationKind, MessageKey> = {
+  SHORTAGE_RISK: 'ai.kind.SHORTAGE_RISK',
+  PRIORITY: 'ai.kind.PRIORITY',
+  BLOCKED_LOT: 'ai.kind.BLOCKED_LOT',
+  WAREHOUSE_SATURATION: 'ai.kind.WAREHOUSE_SATURATION',
+  OPTIMIZATION: 'ai.kind.OPTIMIZATION',
+}
+
+/**
+ * Word a recommendation in the reader's language.
+ *
+ * The engine ships a `text_key` naming the situation it detected plus the
+ * figures behind it; the sentence is assembled here. When a key has no
+ * translation - an older row, or a case added before its wording - the English
+ * the backend already composed is shown instead of a raw key.
+ */
+function useRecommendationText() {
+  const { t, locale } = useI18n()
+  void locale
+
+  return (
+    recommendation: Recommendation,
+    part: 'title' | 'message' | 'why' | 'action',
+    fallback: string,
+  ) => {
+    if (!recommendation.text_key) return fallback
+    const key = `reco.${recommendation.text_key}.${part}` as MessageKey
+    const values: Record<string, string | number> = {
+      ...(recommendation.metrics as Record<string, string | number>),
+      part_reference: recommendation.part_reference ?? '',
+      lot_number: recommendation.lot_number ?? '',
+      location_code: recommendation.location_code ?? '',
+    }
+    const rendered = t(key, values)
+    return rendered === key ? fallback : rendered
+  }
 }
 
 /**
@@ -43,6 +75,8 @@ const KIND_LABEL: Record<RecommendationKind, string> = {
  * reasoning and the figures that produced it.
  */
 export default function AiAssistant() {
+  const { t, ts, formatNumber } = useI18n()
+  const say = useRecommendationText()
   const analysis = useApiResource(() => aiApi.analysis(true), [])
 
   const data = analysis.data
@@ -51,8 +85,8 @@ export default function AiAssistant() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="AI Assistant"
-        description="Decision support built on the operational data — every conclusion is justified."
+        title={t('ai.title')}
+        description={t('ai.subtitle')}
         actions={
           <Button
             variant="primary"
@@ -60,7 +94,7 @@ export default function AiAssistant() {
             loading={analysis.loading && !analysis.initialLoading}
             onClick={analysis.refresh}
           >
-            Re-run the analysis
+            {t('ai.rerun')}
           </Button>
         }
       />
@@ -82,8 +116,12 @@ export default function AiAssistant() {
                 <Brain className="h-5 w-5 text-accent" strokeWidth={1.8} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="eyebrow">Situation assessment</p>
-                <p className="mt-1.5 text-sm leading-relaxed text-ink">{data.headline}</p>
+                <p className="eyebrow">{t('ai.assessment')}</p>
+                <p className="mt-1.5 text-sm leading-relaxed text-ink">
+                  {data.headline_key
+                    ? t(data.headline_key as MessageKey, data.headline_values)
+                    : data.headline}
+                </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge severity="crit">P1 · {data.priority_count['1'] ?? 0}</Badge>
                   <Badge severity="warn">P2 · {data.priority_count['2'] ?? 0}</Badge>
@@ -96,27 +134,31 @@ export default function AiAssistant() {
           {/* Shortage risk */}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <StatTile
-              label="References at high risk"
+              label={t('ai.highRisk')}
               value={formatNumber(highRisks.length)}
-              hint={highRisks.length ? highRisks.map((r) => r.part_reference).join(', ') : 'None'}
+              hint={
+                highRisks.length
+                  ? highRisks.map((r) => r.part_reference).join(', ')
+                  : t('common.none')
+              }
               severity={highRisks.length ? 'crit' : 'ok'}
             />
             <StatTile
-              label="References under watch"
+              label={t('ai.underWatch')}
               value={formatNumber(data.shortage_risks.length - highRisks.length)}
-              hint="Medium risk"
+              hint={t('ai.mediumRisk')}
               severity={data.shortage_risks.length - highRisks.length ? 'warn' : 'ok'}
             />
             <StatTile
-              label="Active recommendations"
+              label={t('ai.activeRecommendations')}
               value={formatNumber(data.recommendations.length)}
-              hint="Ordered by priority"
+              hint={t('ai.byPriority')}
               severity="info"
             />
             <StatTile
-              label="Priority 1"
+              label={t('ai.priorityOne')}
               value={formatNumber(data.priority_count['1'] ?? 0)}
-              hint="Production at risk — handle first"
+              hint={t('ai.priorityOneHint')}
               severity={data.priority_count['1'] ? 'crit' : 'ok'}
             />
           </div>
@@ -125,15 +167,15 @@ export default function AiAssistant() {
             {/* Recommendations */}
             <Panel
               className="xl:col-span-2"
-              title="Recommendations"
-              subtitle="Ordered by priority — each one states why it was produced"
+              title={t('ai.recommendations')}
+              subtitle={t('ai.recommendationsSubtitle')}
               delay={0.06}
               bodyClassName=""
             >
               {data.recommendations.length === 0 ? (
                 <EmptyState
-                  title="No recommendation"
-                  description="No risk or optimisation opportunity detected."
+                  title={t('ai.noRecommendation')}
+                  description={t('ai.noRecommendationHint')}
                 />
               ) : (
                 <ul className="divide-y divide-line">
@@ -169,39 +211,43 @@ export default function AiAssistant() {
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-xs font-semibold text-ink">
-                                {recommendation.title}
+                                {say(recommendation, 'title', recommendation.title)}
                               </p>
                               <Badge
                                 severity={prioritySeverity[recommendation.priority] ?? 'info'}
                               >
                                 P{recommendation.priority}
                               </Badge>
-                              <Badge severity="info">{KIND_LABEL[recommendation.kind]}</Badge>
+                              <Badge severity="info">{t(KIND_KEY[recommendation.kind])}</Badge>
                               {recommendation.risk_level && (
                                 <Badge severity={riskSeverity[recommendation.risk_level]}>
-                                  {recommendation.risk_level}
+                                  {ts(recommendation.risk_level)}
                                 </Badge>
                               )}
                             </div>
 
                             <p className="mt-1.5 text-xs leading-relaxed text-ink-2">
-                              {recommendation.message}
+                              {say(recommendation, 'message', recommendation.message)}
                             </p>
 
                             {/* Mandatory justification */}
                             <div className="mt-2 rounded-md border border-line bg-elevated/60 px-3 py-2">
-                              <p className="text-[10px] font-semibold uppercase tracking-wider text-ink-3">
-                                Why
+                              <p className="text-[11px] font-semibold uppercase tracking-wider text-ink-3">
+                                {t('ai.why')}
                               </p>
                               <p className="mt-1 text-2xs leading-relaxed text-ink-2">
-                                {recommendation.rationale}
+                                {say(recommendation, 'why', recommendation.rationale)}
                               </p>
                             </div>
 
                             {recommendation.recommended_action && (
                               <p className="mt-2 flex items-start gap-1.5 text-2xs text-accent/90">
                                 <Lightbulb className="mt-0.5 h-3 w-3 shrink-0" />
-                                {recommendation.recommended_action}
+                                {say(
+                                  recommendation,
+                                  'action',
+                                  recommendation.recommended_action,
+                                )}
                               </p>
                             )}
 
@@ -210,9 +256,12 @@ export default function AiAssistant() {
                                 {Object.entries(recommendation.metrics).map(([key, value]) => (
                                   <span
                                     key={key}
-                                    className="rounded border border-line bg-panel px-2 py-0.5 text-[10px] text-ink-3"
+                                    className="rounded border border-line bg-panel px-2 py-0.5 text-[11px] text-ink-3"
                                   >
-                                    {key.replace(/_/g, ' ')}:{' '}
+                                    {t(`metric.${key}` as MessageKey) === `metric.${key}`
+                                      ? key.replace(/_/g, ' ')
+                                      : t(`metric.${key}` as MessageKey)}
+                                    :{' '}
                                     <span className="numeric text-ink-2">
                                       {Array.isArray(value)
                                         ? value.join(', ')
@@ -233,15 +282,15 @@ export default function AiAssistant() {
 
             {/* Shortage risk detail */}
             <Panel
-              title="Shortage risk"
-              subtitle="Stock versus confirmed demand"
+              title={t('ai.shortageTitle')}
+              subtitle={t('ai.shortageSubtitle')}
               delay={0.1}
               bodyClassName=""
             >
               {data.shortage_risks.length === 0 ? (
                 <EmptyState
-                  title="No risk"
-                  description="Every reference covers its confirmed demand."
+                  title={t('ai.noRisk')}
+                  description={t('ai.noRiskHint')}
                 />
               ) : (
                 <ul className="divide-y divide-line">
@@ -253,24 +302,37 @@ export default function AiAssistant() {
                           {risk.part_reference}
                         </span>
                         <Badge severity={riskSeverity[risk.risk_level]} className="ml-auto">
-                          {risk.risk_level}
+                          {ts(risk.risk_level)}
                         </Badge>
                       </div>
 
                       <div className="mt-2 grid grid-cols-3 gap-2">
-                        <Figure label="Stock" value={formatNumber(risk.stock_available)} />
-                        <Figure label="Demand" value={formatNumber(risk.open_demand)} />
+                        <Figure label={t('chart.stock')} value={formatNumber(risk.stock_available)} />
+                        <Figure label={t('chart.demand')} value={formatNumber(risk.open_demand)} />
                         <Figure
-                          label="Cover"
+                          label={t('chart.coverage')}
                           value={risk.days_of_cover !== null ? `${risk.days_of_cover} d` : '—'}
                         />
                       </div>
 
-                      <p className="mt-2 text-2xs leading-relaxed text-ink-3">{risk.rationale}</p>
+                      <p className="mt-2 text-2xs leading-relaxed text-ink-3">
+                        {risk.text_key
+                          ? t(`reco.${risk.text_key}.why` as MessageKey, {
+                              stock_available: risk.stock_available,
+                              open_demand: risk.open_demand,
+                              safety_stock: risk.safety_stock,
+                              projected_balance: risk.projected_balance,
+                              days_of_cover: risk.days_of_cover ?? '—',
+                              part_reference: risk.part_reference,
+                            })
+                          : risk.rationale}
+                      </p>
 
                       {risk.incoming_quantity > 0 && (
                         <p className="mt-1.5 text-2xs text-info-soft">
-                          {formatNumber(risk.incoming_quantity)} units received but not yet stock.
+                          {t('ai.incoming', {
+                            value: formatNumber(risk.incoming_quantity),
+                          })}
                         </p>
                       )}
                     </li>
@@ -282,8 +344,8 @@ export default function AiAssistant() {
 
           {/* Copilot */}
           <Panel
-            title="Logistics Copilot"
-            subtitle="Ask a question — answers come from the live database"
+            title={t('copilot.title')}
+            subtitle={t('copilot.subtitle')}
             delay={0.14}
             bodyClassName=""
           >
@@ -298,7 +360,7 @@ export default function AiAssistant() {
 function Figure({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border border-line bg-elevated/60 px-2 py-1.5">
-      <p className="text-[10px] text-ink-3">{label}</p>
+      <p className="text-[11px] text-ink-3">{label}</p>
       <p className="numeric mt-0.5 text-2xs font-semibold text-ink">{value}</p>
     </div>
   )

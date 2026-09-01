@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
 import { Loader2 } from 'lucide-react'
 
+import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/utils/cn'
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success'
@@ -142,9 +143,10 @@ export function LoadingPanel({ rows = 3 }: { rows?: number }) {
 }
 
 export function ErrorPanel({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  const { t } = useI18n()
   return (
     <EmptyState
-      title="Could not load this data"
+      title={t('common.error')}
       description={message}
       action={
         onRetry ? (

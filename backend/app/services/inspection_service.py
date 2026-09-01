@@ -11,6 +11,8 @@ An inspection never touches stock.
 
 from __future__ import annotations
 
+import json
+
 import math
 from datetime import datetime, timezone
 
@@ -123,12 +125,26 @@ def record_inspection(
     if result is InspectionResult.CONFORM:
         lot.status = LotStatus.QUALITY_PENDING
         lot.blocked_reason = None
+        lot.blocked_reason_key = None
+        lot.blocked_reason_values = None
     else:
         lot.status = LotStatus.RED_CAGE
         lot.blocked_reason = (
             f"Non conform on inspection {inspection.reference}: "
             f"{defects_found}/{sample_size} defects = {defect_rate:.2f}% "
             f"(threshold {threshold:g}%)"
+        )
+        # The same facts, structured, so the screen can word them in French or
+        # English. The sentence above stays: it is what the audit recorded.
+        lot.blocked_reason_key = "blocked.nonConform"
+        lot.blocked_reason_values = json.dumps(
+            {
+                "inspection": inspection.reference,
+                "defects": defects_found,
+                "sample": sample_size,
+                "rate": round(defect_rate, 2),
+                "threshold": threshold,
+            }
         )
     db.flush()
 

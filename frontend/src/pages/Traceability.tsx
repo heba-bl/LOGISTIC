@@ -28,7 +28,7 @@ import { lotStatusSeverity } from '@/utils/status'
  * and why — by searching the append-only audit trail.
  */
 export default function Traceability() {
-  const { ts } = useI18n()
+  const { t, ts } = useI18n()
   const [search, setSearch] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
   const [entityType, setEntityType] = useState('')
@@ -57,8 +57,8 @@ export default function Traceability() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Traceability"
-        description="Complete history of every lot and every audited action."
+        title={t('trace.title')}
+        description={t('trace.subtitle')}
         actions={
           <form onSubmit={onSubmit} className="flex flex-wrap items-center gap-2">
             <div className="relative">
@@ -66,7 +66,7 @@ export default function Traceability() {
               <Input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Lot, reference, operator…"
+                placeholder={t('common.searchPlaceholder')}
                 className="w-64 pl-9"
               />
             </div>
@@ -75,16 +75,16 @@ export default function Traceability() {
               onChange={(event) => setEntityType(event.target.value)}
               className="w-40"
             >
-              <option value="">All events</option>
-              <option value="reception">Receptions</option>
-              <option value="inspection">Inspections</option>
-              <option value="quality_validation">Quality</option>
-              <option value="lot">Lots</option>
-              <option value="stock">Stock</option>
-              <option value="production_request">Production</option>
+              <option value="">{t('trace.allEvents')}</option>
+              <option value="reception">{t('trace.event.reception')}</option>
+              <option value="inspection">{t('trace.event.inspection')}</option>
+              <option value="quality_validation">{t('trace.event.quality')}</option>
+              <option value="lot">{t('trace.event.lot')}</option>
+              <option value="stock">{t('trace.event.stock')}</option>
+              <option value="production_request">{t('trace.event.production')}</option>
             </Select>
             <Button type="submit" variant="primary">
-              Search
+              {t('trace.searchButton')}
             </Button>
           </form>
         }
@@ -92,8 +92,8 @@ export default function Traceability() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Panel
-          title="Lots"
-          subtitle={`${lots.data?.length ?? 0} lots — click to open the full history`}
+          title={t('trace.lots')}
+          subtitle={t('trace.lotsSubtitle', { count: lots.data?.length ?? 0 })}
           bodyClassName=""
           action={<Route className="h-3.5 w-3.5 text-ink-3" />}
         >
@@ -102,7 +102,7 @@ export default function Traceability() {
           ) : lots.error ? (
             <ErrorPanel message={lots.error} onRetry={lots.refresh} />
           ) : (lots.data?.length ?? 0) === 0 ? (
-            <EmptyState title="No lot found" description="Try another search term." />
+            <EmptyState title={t('trace.noLot')} description={t('trace.noLotHint')} />
           ) : (
             <ul className="max-h-[520px] divide-y divide-line overflow-y-auto">
               {lots.data?.map((lot) => (
@@ -133,8 +133,8 @@ export default function Traceability() {
 
         <Panel
           className="xl:col-span-2"
-          title="Audit trail"
-          subtitle={`${audit.data?.length ?? 0} recorded events`}
+          title={t('trace.audit')}
+          subtitle={t('trace.auditSubtitle', { count: audit.data?.length ?? 0 })}
           bodyClassName=""
           action={<History className="h-3.5 w-3.5 text-ink-3" />}
         >
@@ -143,20 +143,20 @@ export default function Traceability() {
           ) : audit.error ? (
             <ErrorPanel message={audit.error} onRetry={audit.refresh} />
           ) : (audit.data?.length ?? 0) === 0 ? (
-            <EmptyState title="No event" description="No action matches this filter." />
+            <EmptyState title={t('trace.noEvent')} description={t('trace.noEventHint')} />
           ) : (
             <div className="max-h-[520px] overflow-auto">
               <table className="w-full min-w-[980px] border-collapse text-left">
                 <thead className="sticky top-0 z-10 bg-panel">
                   <tr className="border-b border-line">
-                    <th className="eyebrow px-5 py-2.5 font-semibold">When</th>
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Action</th>
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Target</th>
-                    <th className="eyebrow px-5 py-2.5 text-right font-semibold">Qty</th>
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Transition</th>
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Who entered</th>
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Who validated</th>
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Why</th>
+                    <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.when')}</th>
+                    <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.action')}</th>
+                    <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.target')}</th>
+                    <th className="eyebrow px-5 py-2.5 text-right font-semibold">{t('trace.col.qty')}</th>
+                    <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.transition')}</th>
+                    <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.whoEntered')}</th>
+                    <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.whoValidated')}</th>
+                    <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.why')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -183,7 +183,7 @@ export default function Traceability() {
                         <span className="numeric block text-2xs text-ink">
                           {entry.maker_reference ?? entry.actor_reference ?? '—'}
                         </span>
-                        <span className="block text-[10px] text-ink-3">
+                        <span className="block text-[11px] text-ink-3">
                           {entry.maker_role
                             ? ts(entry.maker_role)
                             : entry.actor_name}
@@ -195,7 +195,7 @@ export default function Traceability() {
                             <span className="numeric block text-2xs text-ok-soft">
                               {entry.checker_reference}
                             </span>
-                            <span className="block text-[10px] text-ink-3">
+                            <span className="block text-[11px] text-ink-3">
                               {ts(entry.checker_role ?? '')}
                               {entry.decision ? ` · ${ts(entry.decision)}` : ''}
                             </span>
@@ -207,8 +207,8 @@ export default function Traceability() {
                       <td className="max-w-md px-5 py-2.5 text-2xs text-ink-3">
                         {entry.reason ?? '—'}
                         {entry.source_file && (
-                          <span className="numeric mt-0.5 block text-[10px] text-ink-3/70">
-                            file: {entry.source_file}
+                          <span className="numeric mt-0.5 block text-[11px] text-ink-3/70">
+                            {t('trace.file', { value: entry.source_file })}
                           </span>
                         )}
                       </td>
@@ -230,6 +230,7 @@ export default function Traceability() {
 
 /** "Why is the stock of X dropping?" answered from the movement ledger. */
 function PartHistory({ parts }: { parts: { id: number; reference: string; designation: string }[] }) {
+  const { t } = useI18n()
   const [partId, setPartId] = useState('')
   const movements = useApiResource(
     () => traceabilityApi.partMovements(Number(partId)),
@@ -239,8 +240,8 @@ function PartHistory({ parts }: { parts: { id: number; reference: string; design
 
   return (
     <Panel
-      title="Stock history of a reference"
-      subtitle="Every movement in and out, with its justification"
+      title={t('trace.partHistory')}
+      subtitle={t('trace.partHistorySubtitle')}
       bodyClassName=""
       action={
         <Select
@@ -248,7 +249,7 @@ function PartHistory({ parts }: { parts: { id: number; reference: string; design
           onChange={(event) => setPartId(event.target.value)}
           className="w-56"
         >
-          <option value="">Select a reference…</option>
+          <option value="">{t('recv.selectPart')}</option>
           {parts.map((part) => (
             <option key={part.id} value={part.id}>
               {part.reference} — {part.designation}
@@ -259,26 +260,26 @@ function PartHistory({ parts }: { parts: { id: number; reference: string; design
     >
       {!partId ? (
         <EmptyState
-          title="Select a reference"
-          description="The ledger shows every increment and decrement, in order."
+          title={t('trace.selectReference')}
+          description={t('trace.selectReferenceHint')}
         />
       ) : movements.initialLoading ? (
         <LoadingPanel rows={4} />
       ) : (movements.data?.length ?? 0) === 0 ? (
-        <EmptyState title="No movement" description="This reference has never moved." />
+        <EmptyState title={t('trace.noMovement')} description={t('trace.noMovementHint')} />
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] border-collapse text-left">
             <thead>
               <tr className="border-b border-line">
-                <th className="eyebrow px-5 py-2.5 font-semibold">Movement</th>
-                <th className="eyebrow px-5 py-2.5 font-semibold">Type</th>
-                <th className="eyebrow px-5 py-2.5 text-right font-semibold">Quantity</th>
-                <th className="eyebrow px-5 py-2.5 text-right font-semibold">Before</th>
-                <th className="eyebrow px-5 py-2.5 text-right font-semibold">After</th>
-                <th className="eyebrow px-5 py-2.5 font-semibold">Operator</th>
-                <th className="eyebrow px-5 py-2.5 font-semibold">Reason</th>
-                <th className="eyebrow px-5 py-2.5 text-right font-semibold">Date</th>
+                <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.movement')}</th>
+                <th className="eyebrow px-5 py-2.5 font-semibold">{t('trace.col.type')}</th>
+                <th className="eyebrow px-5 py-2.5 text-right font-semibold">{t('common.quantity')}</th>
+                <th className="eyebrow px-5 py-2.5 text-right font-semibold">{t('trace.col.before')}</th>
+                <th className="eyebrow px-5 py-2.5 text-right font-semibold">{t('trace.col.after')}</th>
+                <th className="eyebrow px-5 py-2.5 font-semibold">{t('common.operator')}</th>
+                <th className="eyebrow px-5 py-2.5 font-semibold">{t('common.reason')}</th>
+                <th className="eyebrow px-5 py-2.5 text-right font-semibold">{t('common.date')}</th>
               </tr>
             </thead>
             <tbody>

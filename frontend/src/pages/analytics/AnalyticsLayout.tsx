@@ -90,7 +90,7 @@ export default function AnalyticsLayout() {
                 onClick={() => setPeriod(key)}
                 aria-pressed={period === key}
                 className={cn(
-                  'rounded-md px-3 py-1.5 text-2xs font-medium transition-colors',
+                  'flex h-9 cursor-pointer items-center rounded-lg px-3.5 text-2xs font-medium transition-colors duration-[var(--t-fast)]',
                   period === key
                     ? 'bg-accent text-panel'
                     : 'text-ink-2 hover:bg-elevated hover:text-ink',
@@ -108,7 +108,7 @@ export default function AnalyticsLayout() {
                 value={from}
                 max={to}
                 onChange={(event) => setFrom(event.target.value)}
-                className="numeric rounded-md border border-line bg-panel px-2 py-1.5 text-2xs text-ink focus:border-accent/60 focus:outline-none"
+                className="numeric h-9 rounded-lg border border-line bg-elevated/60 px-2.5 text-2xs text-ink transition-colors focus:border-accent focus:bg-panel focus:outline-none"
               />
               <span className="text-2xs text-ink-3">→</span>
               <input
@@ -116,7 +116,7 @@ export default function AnalyticsLayout() {
                 value={to}
                 min={from}
                 onChange={(event) => setTo(event.target.value)}
-                className="numeric rounded-md border border-line bg-panel px-2 py-1.5 text-2xs text-ink focus:border-accent/60 focus:outline-none"
+                className="numeric h-9 rounded-lg border border-line bg-elevated/60 px-2.5 text-2xs text-ink transition-colors focus:border-accent focus:bg-panel focus:outline-none"
               />
             </div>
           )}

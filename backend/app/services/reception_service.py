@@ -12,6 +12,8 @@ Tolerance rule (PROJECT_SLCC section 3):
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
@@ -121,6 +123,15 @@ def create_reception(
             f"Reception gap of {gap:+d} units on {part.reference} "
             f"(expected {quantity_expected}, received {quantity_received}); "
             f"{rule.describe()} exceeded."
+        )
+        lot.blocked_reason_key = "blocked.quantityGap"
+        lot.blocked_reason_values = json.dumps(
+            {
+                "gap": gap,
+                "reference": part.reference,
+                "expected": quantity_expected,
+                "received": quantity_received,
+            }
         )
 
     db.add(lot)

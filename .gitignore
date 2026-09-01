@@ -25,3 +25,11 @@ dist/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Skills et outillage tiers installes localement: 11 Mo de contenu qui n'est
+# pas le projet, et qui se reinstalle avec `npx @21st-dev/cli install-skill`.
+.claude/skills/
+
+# Fichiers de verrouillage Excel. Un `~$...xlsm` versionne fait croire au
+# binome que le classeur est ouvert par quelqu'un d'autre.
+~$*

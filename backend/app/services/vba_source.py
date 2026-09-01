@@ -263,6 +263,9 @@ Public Const COL_TOKEN As String = "JETON_VALIDATION"
 '' others compiling, and VBA only says so when their code is first run.
 Public Const HEADER_ROW As Long = 4
 
+'' Row 3 of every entry sheet carries the synchronisation banner.
+Public Const FRESH_ROW As Long = 3
+
 '' ---------------------------------------------------------------- utilities
 Public Function SheetByName(ByVal sheetName As String) As Worksheet
     Dim book As Workbook, found As Worksheet
@@ -557,21 +560,19 @@ End Sub
 '' One routine for both decisions: they check exactly the same things, and
 '' splitting them would be two places to forget the maker/checker rule.
 Private Sub DecideRow(ByVal approve As Boolean)
-    Dim ws As Worksheet, r As Long
+    Dim ws As Worksheet
     Dim colStatus As Long, colMaker As Long, colChecker As Long
-    Dim colValidated As Long, colReason As Long
-    Dim maker As String, checker As String, code As String, reason As String
-    Dim recordId As String, zone As String, role As String
+    Dim colValidated As Long, colReason As Long, colSync As Long, colToken As Long
+    Dim checker As String, code As String, reason As String, zone As String
+    Dim rows() As Long, pending As Long, r As Long, i As Long
+    Dim maker As String, recordId As String
+    Dim syncId As String, token As String, refusal As String
+    Dim done As Long, failed As Long, selfCheck As Long
+    Dim summary As String, detail As String
 
     Set ws = ActiveSheet
     If Not IsOperationalSheet(ws) Then
         MsgBox "Cette feuille n'est pas une feuille de saisie.", vbExclamation, "SLCC"
-        Exit Sub
-    End If
-
-    r = ActiveCell.Row
-    If r <= HEADER_ROW Then
-        MsgBox "Selectionnez la ligne a traiter.", vbExclamation, "SLCC"
         Exit Sub
     End If
 
@@ -580,28 +581,21 @@ Private Sub DecideRow(ByVal approve As Boolean)
     colChecker = ColumnIndex(ws, COL_CHECKER)
     colValidated = ColumnIndex(ws, COL_VALIDATED)
     colReason = ColumnIndex(ws, COL_REASON)
+    colSync = ColumnIndex(ws, COL_SYNC_ID)
+    colToken = ColumnIndex(ws, COL_TOKEN)
 
-    If UCase$(Trim$(CStr(ws.Cells(r, colStatus).Value))) <> ST_PENDING Then
-        MsgBox "Seule une ligne '" & ST_PENDING & "' peut etre traitee.", vbExclamation, "SLCC"
+    '' Every pending row the selection touches. One cell selected means one row,
+    '' so the single-line habit keeps working unchanged.
+    pending = CollectPending(ws, colStatus, rows)
+    If pending = 0 Then
+        MsgBox "Aucune ligne '" & ST_PENDING & "' dans la selection.", vbExclamation, "SLCC"
         Exit Sub
     End If
-
-    maker = Trim$(CStr(ws.Cells(r, colMaker).Value))
-    recordId = CStr(ws.Cells(r, 1).Value)
 
     checker = Trim$(InputBox("VALIDATION RESPONSABLE" & vbCrLf & vbCrLf & _
+                             pending & " ligne(s) selectionnee(s)." & vbCrLf & _
                              "Matricule responsable :", "SLCC"))
     If Len(checker) = 0 Then Exit Sub
-
-    '' The rule the whole workflow exists for.
-    If UCase$(checker) = UCase$(maker) Then
-        MsgBox "VALIDATION REFUSEE" & vbCrLf & vbCrLf & _
-               "Vous ne pouvez pas valider votre propre saisie." & vbCrLf & _
-               "Un responsable different doit intervenir.", vbCritical, "SLCC"
-        WriteHistory recordId, "REFUS_AUTO_VALIDATION", maker, checker, _
-                     ST_PENDING, ST_PENDING, "maker = checker", ws.Name
-        Exit Sub
-    End If
 
     If FindUser(checker) = 0 Then
         MsgBox "VALIDATION REFUSEE" & vbCrLf & "Matricule inconnu.", vbCritical, "SLCC"
@@ -611,7 +605,6 @@ Private Sub DecideRow(ByVal approve As Boolean)
         MsgBox "VALIDATION REFUSEE" & vbCrLf & "Compte inactif.", vbCritical, "SLCC"
         Exit Sub
     End If
-
     If UCase$(UserField(checker, "DROIT_VALIDATION")) <> "OUI" Then
         MsgBox "VALIDATION REFUSEE" & vbCrLf & _
                "Ce matricule n'a pas le droit de validation.", vbCritical, "SLCC"
@@ -626,29 +619,19 @@ Private Sub DecideRow(ByVal approve As Boolean)
         Exit Sub
     End If
 
-    code = Trim$(InputBox("Code de validation :", "SLCC"))
-    If Len(code) = 0 Then Exit Sub
-
-    '' The server checks the code and signs the line. This workbook cannot mint
-    '' that signature, which is what stops anyone typing VALIDE into a cell.
-    Dim syncId As String, token As String, refusal As String
-    Dim colSync As Long
-    colSync = ColumnIndex(ws, COL_SYNC_ID)
-    syncId = Trim$(CStr(ws.Cells(r, colSync).Value))
-    If Len(syncId) = 0 Then
-        syncId = BuildSyncId(ws.Name, recordId)
-        ws.Unprotect
-        ws.Cells(r, colSync).Value = syncId
-        ProtectSheet ws
-    End If
-
-    token = RequestValidationToken(ws.Name, syncId, maker, checker, code, refusal)
-    If Len(token) = 0 Then
-        MsgBox "VALIDATION REFUSEE" & vbCrLf & vbCrLf & refusal, vbCritical, "SLCC"
-        WriteHistory recordId, "VALIDATION_REFUSEE", maker, checker, _
-                     ST_PENDING, ST_PENDING, refusal, ws.Name
+    '' What is about to be signed, before the code is asked for.
+    detail = SelectionSummary(ws, rows, pending, colMaker, checker, selfCheck)
+    If selfCheck = pending Then
+        MsgBox "VALIDATION REFUSEE" & vbCrLf & vbCrLf & _
+               "Vous ne pouvez pas valider votre propre saisie." & vbCrLf & _
+               "Un responsable different doit intervenir.", vbCritical, "SLCC"
         Exit Sub
     End If
+
+    If MsgBox(IIf(approve, "VALIDER", "REJETER") & " " & (pending - selfCheck) & _
+              " ligne(s) ?" & vbCrLf & vbCrLf & detail & vbCrLf & _
+              "Votre matricule sera enregistre sur chacune.", _
+              vbQuestion + vbOKCancel, "SLCC") <> vbOK Then Exit Sub
 
     If Not approve Then
         reason = Trim$(InputBox("Motif du rejet (obligatoire) :", "SLCC"))
@@ -658,30 +641,157 @@ Private Sub DecideRow(ByVal approve As Boolean)
         End If
     End If
 
-    ws.Unprotect
-    If approve Then
-        Dim colToken As Long
-        colToken = ColumnIndex(ws, COL_TOKEN)
-        ws.Cells(r, colStatus).Value = ST_APPROVED
-        ws.Cells(r, colChecker).Value = checker
-        If colToken > 0 Then ws.Cells(r, colToken).Value = token
-        If colValidated > 0 Then ws.Cells(r, colValidated).Value = Format$(Now, "dd/mm/yyyy hh:nn")
-        LockRow ws, r
+    code = Trim$(InputBox("Code de validation :", "SLCC"))
+    If Len(code) = 0 Then Exit Sub
+
+    Application.ScreenUpdating = False
+    For i = 1 To pending
+        r = rows(i)
+        maker = Trim$(CStr(ws.Cells(r, colMaker).Value))
+        recordId = CStr(ws.Cells(r, 1).Value)
+
+        '' The rule the whole workflow exists for, checked line by line: a bulk
+        '' selection must not become a way to slip your own entry through.
+        If UCase$(checker) = UCase$(maker) Then
+            WriteHistory recordId, "REFUS_AUTO_VALIDATION", maker, checker, _
+                         ST_PENDING, ST_PENDING, "maker = checker", ws.Name
+            GoTo NextRow
+        End If
+
+        syncId = Trim$(CStr(ws.Cells(r, colSync).Value))
+        If Len(syncId) = 0 Then
+            syncId = BuildSyncId(ws.Name, recordId)
+            ws.Unprotect
+            ws.Cells(r, colSync).Value = syncId
+            ProtectSheet ws
+        End If
+
+        '' One signature per line. The server never signs a batch, so the audit
+        '' still holds N separate decisions rather than one blanket approval.
+        token = RequestValidationToken(ws.Name, syncId, maker, checker, code, refusal)
+        If Len(token) = 0 Then
+            failed = failed + 1
+            WriteHistory recordId, "VALIDATION_REFUSEE", maker, checker, _
+                         ST_PENDING, ST_PENDING, refusal, ws.Name
+            GoTo NextRow
+        End If
+
+        ws.Unprotect
+        If approve Then
+            ws.Cells(r, colStatus).Value = ST_APPROVED
+            ws.Cells(r, colChecker).Value = checker
+            If colToken > 0 Then ws.Cells(r, colToken).Value = token
+            If colValidated > 0 Then _
+                ws.Cells(r, colValidated).Value = Format$(Now, "dd/mm/yyyy hh:nn")
+            LockRow ws, r
+            WriteHistory recordId, "APPROVE", maker, checker, ST_PENDING, ST_APPROVED, "", ws.Name
+        Else
+            ws.Cells(r, colStatus).Value = ST_REJECTED
+            ws.Cells(r, colChecker).Value = checker
+            If colReason > 0 Then ws.Cells(r, colReason).Value = reason
+            '' A rejected line goes back to the operator, so it must be editable.
+            UnlockRow ws, r
+            WriteHistory recordId, "REJECT", maker, checker, ST_PENDING, ST_REJECTED, reason, ws.Name
+        End If
         ProtectSheet ws
-        WriteHistory recordId, "APPROVE", maker, checker, ST_PENDING, ST_APPROVED, "", ws.Name
-        MsgBox "VALIDE" & vbCrLf & vbCrLf & "Validee par " & checker & ".", vbInformation, "SLCC"
-    Else
-        ws.Cells(r, colStatus).Value = ST_REJECTED
-        ws.Cells(r, colChecker).Value = checker
-        If colReason > 0 Then ws.Cells(r, colReason).Value = reason
-        '' A rejected line goes back to the operator, so it must be editable.
-        UnlockRow ws, r
-        ProtectSheet ws
-        WriteHistory recordId, "REJECT", maker, checker, ST_PENDING, ST_REJECTED, reason, ws.Name
-        MsgBox "REJETE" & vbCrLf & vbCrLf & "Motif: " & reason & vbCrLf & _
-               "L'operateur peut corriger puis soumettre a nouveau.", vbInformation, "SLCC"
-    End If
+        done = done + 1
+NextRow:
+    Next i
+    Application.ScreenUpdating = True
+
+    summary = IIf(approve, "VALIDE", "REJETE") & vbCrLf & vbCrLf & _
+              done & " ligne(s) traitee(s) par " & checker & "."
+    If selfCheck > 0 Then _
+        summary = summary & vbCrLf & selfCheck & " ignoree(s): saisie par vous-meme."
+    If failed > 0 Then _
+        summary = summary & vbCrLf & failed & " refusee(s) par SLCC."
+    MsgBox summary, vbInformation, "SLCC"
 End Sub
+
+'' Pending rows inside the current selection, in sheet order.
+''
+'' Returns how many were found and fills `found`. One selected cell yields one
+'' row, so validating a single line still works exactly as it did.
+Private Function CollectPending(ByVal ws As Worksheet, ByVal colStatus As Long, _
+                                ByRef found() As Long) As Long
+    Dim area As Range, cell As Range
+    Dim r As Long, last As Long, total As Long
+    Dim seen As Object
+
+    last = LastDataRow(ws)
+    ReDim found(1 To Application.Max(last, 1))
+    Set seen = Nothing
+
+    For Each area In Selection.Areas
+        For r = area.Row To area.Row + area.Rows.Count - 1
+            If r > HEADER_ROW And r <= last Then
+                If UCase$(Trim$(CStr(ws.Cells(r, colStatus).Value))) = ST_PENDING Then
+                    If Not AlreadyCollected(found, total, r) Then
+                        total = total + 1
+                        found(total) = r
+                    End If
+                End If
+            End If
+        Next r
+    Next area
+
+    CollectPending = total
+End Function
+
+Private Function AlreadyCollected(ByRef found() As Long, ByVal total As Long, _
+                                  ByVal r As Long) As Boolean
+    Dim i As Long
+    For i = 1 To total
+        If found(i) = r Then
+            AlreadyCollected = True
+            Exit Function
+        End If
+    Next i
+End Function
+
+'' A readable digest of what the responsible is about to sign.
+''
+'' Counts, not a list of thirty identifiers: the point is to notice a surprise -
+'' a line you entered yourself, a quantity gap - not to re-read the sheet.
+Private Function SelectionSummary(ByVal ws As Worksheet, ByRef rows() As Long, _
+                                  ByVal pending As Long, ByVal colMaker As Long, _
+                                  ByVal checker As String, ByRef selfCheck As Long) As String
+    Dim i As Long, r As Long
+    Dim makers As String, refs As Object, gaps As Long
+    Dim colRef As Long, colGap As Long, reference As String
+    Dim distinct As Long
+
+    colRef = ColumnIndex(ws, "REFERENCE_PIECE")
+    colGap = ColumnIndex(ws, "ECART")
+    selfCheck = 0
+    distinct = 0
+
+    For i = 1 To pending
+        r = rows(i)
+        If UCase$(Trim$(CStr(ws.Cells(r, colMaker).Value))) = UCase$(checker) Then
+            selfCheck = selfCheck + 1
+        End If
+        If colRef > 0 Then
+            reference = Trim$(CStr(ws.Cells(r, colRef).Value))
+            If Len(reference) > 0 And InStr(makers, "|" & reference & "|") = 0 Then
+                makers = makers & "|" & reference & "|"
+                distinct = distinct + 1
+            End If
+        End If
+        If colGap > 0 Then
+            If Val(CStr(ws.Cells(r, colGap).Value)) <> 0 Then gaps = gaps + 1
+        End If
+    Next i
+
+    SelectionSummary = pending & " ligne(s)"
+    If distinct > 0 Then SelectionSummary = SelectionSummary & ", " & distinct & " reference(s)"
+    If gaps > 0 Then SelectionSummary = SelectionSummary & ", " & gaps & " avec ecart"
+    SelectionSummary = SelectionSummary & "."
+    If selfCheck > 0 Then
+        SelectionSummary = SelectionSummary & vbCrLf & _
+                           selfCheck & " ligne(s) saisie(s) par vous seront ignoree(s)."
+    End If
+End Function
 
 '' Which zone owns a sheet. Drives the "right manager for the right sheet" rule.
 Public Function ZoneOfSheet(ByVal sheetName As String) As String
@@ -743,6 +853,19 @@ End Sub
 _SYNC = r'''
 Option Explicit
 
+'' Minutes between two unattended pushes.
+Private Const AUTO_MINUTES As Double = 5
+
+'' The pending tick, so it can be cancelled. An OnTime still scheduled when the
+'' file closes makes Excel reopen it on its own - a timer nobody asked for.
+''
+'' These belong here and nowhere else: VBA only treats a Private as module state
+'' when it stands before the first procedure. Placed further down it is accepted
+'' silently and every use of the name fails to compile.
+Private gTick As Double
+Private gTarget As String
+Private gBusy As Boolean
+
 '' Where SLCC listens. Kept on the CONFIGURATION sheet so a site can point the
 '' workbook at its own server without touching the code.
 Private Function ApiBase() As String
@@ -755,46 +878,61 @@ Private Function ApiBase() As String
     End If
 End Function
 
-'' Push approved rows to SLCC.
+'' Which rows a sheet still owes SLCC.
 ''
-'' Only VALIDE lines are sent. A draft or a pending line is work in progress,
-'' and the backend would refuse it anyway - the filter is here so the operator
-'' gets a clear count rather than a wall of rejections.
-Public Sub EnregistrerEtSynchroniser(Optional control As Object)
-    Dim ws As Worksheet, r As Long, last As Long
-    Dim colStatus As Long, colSync As Long, colSyncState As Long
-    Dim payload As String, lines As String, sent As Long, skipped As Long
-    Dim response As String, failure As String, httpStatus As Long
-
-    Set ws = ActiveSheet
-    If Not IsOperationalSheet(ws) Then
-        MsgBox "Placez-vous sur une feuille de saisie.", vbExclamation, "SLCC"
-        Exit Sub
-    End If
+'' Returns how many, fills `batch` with their row numbers and `lines` with their
+'' JSON. The batch matters: stamping every approved row instead - which is what
+'' this used to do - told the operator that lines nobody sent had been sent, and
+'' on a failure it erased the SYNCHRONISE state of rows that had gone through.
+Private Function PendingRows(ws As Worksheet, ByRef batch() As Long, _
+                             ByRef lines As String, ByRef ignored As Long) As Long
+    Dim r As Long, last As Long, total As Long
+    Dim colStatus As Long, colSyncState As Long
 
     colStatus = ColumnIndex(ws, COL_STATUS)
-    colSync = ColumnIndex(ws, COL_SYNC_ID)
     colSyncState = ColumnIndex(ws, COL_SYNC_STATUS)
     last = LastDataRow(ws)
-
+    ReDim batch(1 To Application.Max(last, 1))
     lines = ""
+
     For r = HEADER_ROW + 1 To last
         If UCase$(Trim$(CStr(ws.Cells(r, colStatus).Value))) = ST_APPROVED Then
-            If colSyncState = 0 Or UCase$(Trim$(CStr(ws.Cells(r, colSyncState).Value))) <> "SYNCHRONISE" Then
+            If colSyncState = 0 Or _
+               UCase$(Trim$(CStr(ws.Cells(r, colSyncState).Value))) <> "SYNCHRONISE" Then
                 If Len(lines) > 0 Then lines = lines & ","
                 lines = lines & RowToJson(ws, r)
-                sent = sent + 1
+                total = total + 1
+                batch(total) = r
             End If
         ElseIf Len(Trim$(CStr(ws.Cells(r, 1).Value))) > 0 Then
-            skipped = skipped + 1
+            ignored = ignored + 1
         End If
     Next r
 
+    PendingRows = total
+End Function
+
+'' Send one sheet's validated lines. Never shows anything.
+''
+'' The ribbon button and the background timer both come through here, so the
+'' rule about what may leave the file lives in one place. Only VALIDE lines go:
+'' a draft or a pending line is work in progress, and the backend would refuse
+'' it anyway - the filter is here so the operator gets a count, not a wall of
+'' rejections.
+Private Function PushSheet(ws As Worksheet, ByRef sent As Long, _
+                           ByRef ignored As Long, ByRef note As String) As Boolean
+    Dim batch() As Long, lines As String, payload As String
+    Dim response As String, failure As String, httpStatus As Long
+    Dim colSyncState As Long
+
+    note = ""
+    sent = PendingRows(ws, batch, lines, ignored)
     If sent = 0 Then
-        MsgBox "Aucune ligne validee a synchroniser." & vbCrLf & _
-               skipped & " ligne(s) non validee(s) ignoree(s).", vbInformation, "SLCC"
-        Exit Sub
+        PushSheet = True
+        Exit Function
     End If
+
+    colSyncState = ColumnIndex(ws, COL_SYNC_STATUS)
 
     '' ws.Parent, and not the project's own workbook object: see SheetByName. The
     '' workbook that owns the sheet being synchronised is also the one whose name
@@ -802,45 +940,154 @@ Public Sub EnregistrerEtSynchroniser(Optional control As Object)
     payload = "{""sheet"":""" & ws.Name & """,""file"":""" & ws.Parent.Name & _
               """,""rows"":[" & lines & "]}"
 
-    If Not SlccRequest("POST", ApiBase() & "/excel/sync", payload, httpStatus, response, failure) Then
-        GoTo Offline
+    If Not SlccRequest("POST", ApiBase() & "/excel/sync", payload, _
+                       httpStatus, response, failure) Then
+        note = failure
+        MarkBatch ws, colSyncState, batch, sent, "HORS LIGNE"
+        Exit Function
     End If
 
     If httpStatus < 200 Or httpStatus >= 300 Then
-        MsgBox "X Erreur de synchronisation" & vbCrLf & _
-               "Reponse " & httpStatus & vbCrLf & Left$(response, 300), _
-               vbCritical, "SLCC"
-        MarkSync ws, colSyncState, "ERREUR"
-        Exit Sub
+        note = "Reponse " & httpStatus & " - " & Left$(response, 200)
+        MarkBatch ws, colSyncState, batch, sent, "ERREUR"
+        Exit Function
     End If
-    MarkSync ws, colSyncState, "SYNCHRONISE"
-    MsgBox "/ Synchronise" & vbCrLf & vbCrLf & _
-           sent & " ligne(s) validee(s) envoyee(s)." & vbCrLf & _
-           skipped & " ligne(s) non validee(s) ignoree(s)." & vbCrLf & vbCrLf & _
-           Left$(response, 300), vbInformation, "SLCC"
-    Exit Sub
 
-Offline:
-    MsgBox "X SLCC injoignable" & vbCrLf & vbCrLf & _
-           "Le fichier reste utilisable: les lignes validees seront envoyees" & vbCrLf & _
-           "a la prochaine synchronisation." & vbCrLf & vbCrLf & _
-           "Adresse essayee: " & ApiBase() & vbCrLf & failure, vbExclamation, "SLCC"
-End Sub
+    MarkBatch ws, colSyncState, batch, sent, "SYNCHRONISE"
+    note = Left$(response, 300)
+    PushSheet = True
+End Function
 
-Private Sub MarkSync(ws As Worksheet, ByVal col As Long, ByVal state As String)
-    Dim r As Long, last As Long, colStatus As Long
-    If col = 0 Then Exit Sub
-    colStatus = ColumnIndex(ws, COL_STATUS)
-    last = LastDataRow(ws)
+Private Sub MarkBatch(ws As Worksheet, ByVal col As Long, ByRef batch() As Long, _
+                      ByVal total As Long, ByVal state As String)
+    Dim i As Long
+    If col = 0 Or total = 0 Then Exit Sub
     ws.Unprotect
-    For r = HEADER_ROW + 1 To last
-        If UCase$(Trim$(CStr(ws.Cells(r, colStatus).Value))) = ST_APPROVED Then
-            ws.Cells(r, col).Value = state
-            ws.Cells(r, col).Value = state
-        End If
-    Next r
+    For i = 1 To total
+        ws.Cells(batch(i), col).Value = state
+    Next i
     ProtectSheet ws
 End Sub
+
+'' Push the current sheet, and say what happened.
+Public Sub EnregistrerEtSynchroniser(Optional control As Object)
+    Dim ws As Worksheet
+    Dim sent As Long, ignored As Long, note As String
+    Dim ok As Boolean
+
+    Set ws = ActiveSheet
+    If Not IsOperationalSheet(ws) Then
+        MsgBox "Placez-vous sur une feuille de saisie.", vbExclamation, "SLCC"
+        Exit Sub
+    End If
+
+    ok = PushSheet(ws, sent, ignored, note)
+    StampFreshness ws, ok, sent
+
+    If ok And sent = 0 Then
+        MsgBox "Aucune ligne validee a synchroniser." & vbCrLf & _
+               ignored & " ligne(s) non validee(s) ignoree(s).", vbInformation, "SLCC"
+    ElseIf ok Then
+        MsgBox "/ Synchronise" & vbCrLf & vbCrLf & _
+               sent & " ligne(s) validee(s) envoyee(s)." & vbCrLf & _
+               ignored & " ligne(s) non validee(s) ignoree(s)." & vbCrLf & vbCrLf & _
+               note, vbInformation, "SLCC"
+    Else
+        MsgBox "X SLCC injoignable" & vbCrLf & vbCrLf & _
+               "Le fichier reste utilisable: les " & sent & " ligne(s) validee(s)" & vbCrLf & _
+               "repartiront a la prochaine synchronisation, automatique ou manuelle." & _
+               vbCrLf & vbCrLf & "Adresse essayee: " & ApiBase() & vbCrLf & note, _
+               vbExclamation, "SLCC"
+    End If
+End Sub
+
+
+'' ------------------------------------------------------- synchro automatique
+
+'' Excel calls these two for a standard module when the file opens and closes.
+'' The usual Workbook_Open lives in ThisWorkbook, which this project cannot bind
+'' to: see SheetByName.
+Public Sub Auto_Open()
+    ArmAutoSync
+End Sub
+
+Public Sub Auto_Close()
+    DisarmAutoSync
+End Sub
+
+Public Sub ArmAutoSync()
+    On Error Resume Next
+    DisarmAutoSync
+    '' Qualified with the file name: an unqualified OnTime can land in another
+    '' open workbook that happens to define the same procedure.
+    gTarget = "'" & ActiveSheet.Parent.Name & "'!SlccAutoSync"
+    gTick = CDbl(Now) + AUTO_MINUTES / 1440#
+    Application.OnTime CDate(gTick), gTarget
+End Sub
+
+Public Sub DisarmAutoSync()
+    On Error Resume Next
+    If gTick > 0 And Len(gTarget) > 0 Then
+        Application.OnTime CDate(gTick), gTarget, , False
+    End If
+    gTick = 0
+End Sub
+
+'' The unattended push.
+''
+'' Silent by construction. An operator typing a line must never be interrupted
+'' by a dialog they did not ask for, and a failed push is not their problem: the
+'' banner records it and the next tick tries again. Excel defers OnTime while a
+'' cell is being edited, so this cannot land mid-keystroke either.
+Public Sub SlccAutoSync()
+    Dim ws As Worksheet, book As Workbook
+    Dim sent As Long, ignored As Long, note As String
+    Dim ok As Boolean
+
+    If gBusy Then Exit Sub
+    gBusy = True
+    On Error Resume Next
+
+    Set book = ActiveSheet.Parent
+    If Not book Is Nothing Then
+        For Each ws In book.Worksheets
+            If IsOperationalSheet(ws) Then
+                ok = PushSheet(ws, sent, ignored, note)
+                StampFreshness ws, ok, sent
+                '' One unreachable call means the server is down, not that this
+                '' sheet is special. Trying the six others would freeze Excel for
+                '' six more connection timeouts.
+                If Not ok Then Exit For
+            End If
+        Next ws
+    End If
+
+    gBusy = False
+    ArmAutoSync
+End Sub
+
+'' Say, on the sheet itself, how fresh the mirror is.
+''
+'' The operator cannot see the website, and the website is what management
+'' reads. If the push has been failing since this morning, the sheet in front of
+'' them is the only place that can say so.
+Public Sub StampFreshness(ws As Worksheet, ByVal ok As Boolean, ByVal sent As Long)
+    Dim label As String
+    On Error Resume Next
+    ws.Unprotect
+    If ok Then
+        label = "SLCC a jour - derniere synchro " & Format$(Now, "dd/mm/yyyy hh:nn")
+        If sent > 0 Then label = label & "   " & sent & " ligne(s) envoyee(s)"
+        ws.Cells(FRESH_ROW, 1).Font.Color = RGB(31, 106, 92)
+    Else
+        label = "SLCC injoignable - essai " & Format$(Now, "dd/mm/yyyy hh:nn") & _
+                "   les lignes validees partiront a la prochaine tentative"
+        ws.Cells(FRESH_ROW, 1).Font.Color = RGB(155, 28, 28)
+    End If
+    ws.Cells(FRESH_ROW, 1).Value = label
+    ProtectSheet ws
+End Sub
+
 
 '' One row as JSON, headers becoming keys. Kept deliberately dumb: the backend
 '' validates every field again, so the workbook only has to be honest about

@@ -96,7 +96,7 @@ export function AnalyticsHistogram({
               y={padding.top + innerHeight * (1 - fraction) + 3}
               textAnchor="end"
               className="fill-current text-ink-3"
-              style={{ fontSize: 9 }}
+              style={{ fontSize: 11 }}
             >
               {formatNumber(Math.round(ceiling * fraction))}
             </text>
@@ -145,7 +145,7 @@ export function AnalyticsHistogram({
               y={height - 12}
               textAnchor="middle"
               className="fill-current text-ink-3"
-              style={{ fontSize: 9 }}
+              style={{ fontSize: 11 }}
             >
               {label(bucket)}
             </text>
@@ -269,7 +269,7 @@ export function AnalyticsLineChart({
               y={padding.top + innerHeight * fraction + 3}
               textAnchor="end"
               className="fill-current text-ink-3"
-              style={{ fontSize: 9 }}
+              style={{ fontSize: 11 }}
             >
               {show(low + span * (1 - fraction))}
             </text>
@@ -338,7 +338,7 @@ export function AnalyticsLineChart({
             y={height - 8}
             textAnchor={index === 0 ? 'start' : 'end'}
             className="fill-current text-ink-3"
-            style={{ fontSize: 10 }}
+            style={{ fontSize: 11 }}
           >
             {points[index].label}
           </text>
@@ -612,7 +612,7 @@ export function AnalyticsScatterXY({
               y={padding.top + innerHeight * (1 - fraction) + 3}
               textAnchor="end"
               className="fill-current text-ink-3"
-              style={{ fontSize: 9 }}
+              style={{ fontSize: 11 }}
             >
               {showY(maxY * fraction)}
             </text>
@@ -675,7 +675,7 @@ export function AnalyticsScatterXY({
           y={height - 8}
           textAnchor="middle"
           className="fill-current text-ink-3"
-          style={{ fontSize: 10 }}
+          style={{ fontSize: 11 }}
         >
           {axisLabels.x}
         </text>
@@ -685,7 +685,7 @@ export function AnalyticsScatterXY({
           transform="rotate(-90)"
           textAnchor="middle"
           className="fill-current text-ink-3"
-          style={{ fontSize: 10 }}
+          style={{ fontSize: 11 }}
         >
           {axisLabels.y}
         </text>

@@ -258,6 +258,9 @@ class InspectionRepository(BaseRepository[Inspection]):
                 select(Inspection)
                 .options(
                     joinedload(Inspection.lot).joinedload(Lot.part),
+                    # The supervision report names the supplier too, so it is
+                    # loaded here rather than fetched per row.
+                    joinedload(Inspection.lot).joinedload(Lot.supplier),
                     joinedload(Inspection.inspector),
                 )
                 .order_by(Inspection.id.desc())

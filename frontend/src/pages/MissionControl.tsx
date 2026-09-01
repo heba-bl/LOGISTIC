@@ -1,27 +1,29 @@
 import { useState } from 'react'
-import { Activity, Gauge, RadioTower, RefreshCw } from 'lucide-react'
+import { Activity, RadioTower, RefreshCw } from 'lucide-react'
 
 import { PageHeader } from '@/components/PageHeader'
 import { Button, ErrorPanel, LoadingPanel, Panel, StatusDot } from '@/components/ui'
 import {
-  ActiveLots,
   KpiGrid,
   LogisticsCopilot,
   LogisticsFlow,
   RecentActivity,
   SmartAlerts,
 } from '@/features/mission-control'
-import { SimulationPanel } from '@/features/simulation/SimulationPanel'
 import { LotDetailDrawer } from '@/features/traceability/LotDetailDrawer'
 import { useApiResource } from '@/hooks'
 import { useI18n } from '@/i18n/I18nProvider'
 import { dashboardApi } from '@/services/slcc.service'
 
 /**
- * Mission Control - the main screen.
+ * Mission Control - the plant right now.
  *
- * Every figure comes from `GET /api/dashboard`, refreshed on demand and polled
- * every 30 seconds so the room display stays current.
+ * Every figure here is a snapshot, polled every 30 seconds. Nothing on this
+ * screen covers a period: totals, rates and trends live on the Analyse screens,
+ * and showing them in both places produced two different numbers for the same
+ * question. What this screen owns is the present tense - where the lots are,
+ * what is blocked, who did what a minute ago, and whether the workbook that
+ * feeds all of it is still up to date.
  */
 export default function MissionControl() {
   const { t, formatTime } = useI18n()
@@ -45,7 +47,6 @@ export default function MissionControl() {
         description={t('mission.subtitle')}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <SimulationPanel onCompleted={dashboard.refresh} />
             <Button
               variant="secondary"
               icon={<RefreshCw className="h-3.5 w-3.5" />}
@@ -99,32 +100,17 @@ export default function MissionControl() {
             </Panel>
           </div>
 
-          {/* Lots + alerts */}
-          <div className="grid gap-4 xl:grid-cols-3">
-            <Panel
-              className="xl:col-span-2"
-              title={t('mission.lotsInFlow')}
-              subtitle={t('mission.lotsSubtitle')}
-              delay={0.16}
-              bodyClassName=""
-              action={<Gauge className="h-3.5 w-3.5 text-ink-3" />}
-            >
-              <ActiveLots
-                lots={dashboard.data.lots_in_flow}
-                onSelectLot={(lot) => setSelectedLotId(lot.id)}
-              />
-            </Panel>
-
-            <Panel
-              title={t('mission.alerts')}
-              subtitle={t('mission.alertsSubtitle', { count: dashboard.data.alerts.length })}
-              delay={0.2}
-              bodyClassName=""
-              action={<Activity className="h-3.5 w-3.5 text-ink-3" />}
-            >
-              <SmartAlerts alerts={dashboard.data.alerts} />
-            </Panel>
-          </div>
+          {/* Alerts, full width. The lots that used to sit beside them are the
+              same ones the flow already shows under their stage. */}
+          <Panel
+            title={t('mission.alerts')}
+            subtitle={t('mission.alertsSubtitle', { count: dashboard.data.alerts.length })}
+            delay={0.16}
+            bodyClassName=""
+            action={<Activity className="h-3.5 w-3.5 text-ink-3" />}
+          >
+            <SmartAlerts alerts={dashboard.data.alerts} />
+          </Panel>
 
           {/* Activity + copilot */}
           <div className="grid gap-4 xl:grid-cols-3 xl:items-start">

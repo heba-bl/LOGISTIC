@@ -114,7 +114,7 @@ export function PowerBiDialog({ open, onClose }: { open: boolean; onClose: () =>
                     </div>
                     <p className="mt-1 text-2xs text-ink-3">{dataset.description}</p>
                     {dataset.columns.length > 0 && (
-                      <p className="numeric mt-1.5 text-[10px] leading-relaxed text-ink-3/80">
+                      <p className="numeric mt-1.5 text-[11px] leading-relaxed text-ink-3/80">
                         {dataset.columns.join(' · ')}
                       </p>
                     )}
@@ -132,7 +132,7 @@ export function PowerBiDialog({ open, onClose }: { open: boolean; onClose: () =>
                     className="rounded-lg border border-line bg-elevated/60 px-3 py-2.5"
                   >
                     <p className="text-xs font-medium text-ink">{measure.name}</p>
-                    <code className="numeric mt-1 block overflow-x-auto whitespace-pre rounded border border-line bg-panel px-2 py-1.5 text-[10px] text-accent">
+                    <code className="numeric mt-1 block overflow-x-auto whitespace-pre rounded border border-line bg-panel px-2 py-1.5 text-[11px] text-accent">
                       {measure.expression}
                     </code>
                     <p className="mt-1 text-2xs text-ink-3">{measure.description}</p>

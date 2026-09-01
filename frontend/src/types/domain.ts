@@ -183,8 +183,13 @@ export interface Lot {
   quantity_approved: number
   quantity_available: number
   blocked_reason: string | null
+  /** Set when the services composed the reason; the UI words it. */
+  blocked_reason_key: string | null
+  blocked_reason_values: Record<string, string | number>
   received_at: string
   stored_at: string | null
+  /** Last movement on the lot - what the block ageing is measured from. */
+  updated_at?: string | null
   part: PartRef
   supplier: SupplierRef
   location: LocationRef | null
@@ -228,6 +233,13 @@ export interface Inspection {
   observations: string | null
   inspected_at: string
   inspector: ActorRef | null
+  /** Enough of the lot to name the part and the supplier on a report row. */
+  lot: {
+    id: number
+    lot_number: string
+    part: { id: number; reference: string; designation: string; unit: string }
+    supplier: { id: number; code: string; name: string }
+  }
 }
 
 export interface SampleSuggestion {
@@ -364,7 +376,11 @@ export interface Kpi {
   label: string
   value: number
   unit: string | null
+  /** English wording, kept as the fallback when `hint_key` is unknown. */
   hint: string
+  /** Translation key for the same sentence; preferred when present. */
+  hint_key?: string
+  hint_values?: Record<string, string | number>
   severity: ApiSeverity
   ratio: number | null
 }
@@ -384,6 +400,9 @@ export interface Alert {
   severity: ApiSeverity
   title: string
   message: string
+  /** Set when the services composed the reason; the UI words it. */
+  message_key: string | null
+  message_values: Record<string, string | number>
   source: string
   timestamp: string
   lot_number: string | null
@@ -519,6 +538,8 @@ export interface PowerBiCatalog {
 // -------------------------------------------------------------------------- AI
 export interface Recommendation {
   id: number
+  /** Names the situation the engine detected; the UI words it. */
+  text_key: string | null
   kind: RecommendationKind
   severity: ApiSeverity
   risk_level: RiskLevel | null
@@ -537,6 +558,8 @@ export interface Recommendation {
 export interface ShortageRisk {
   part_id: number
   part_reference: string
+  /** Names the branch the rating rests on; the UI words it. */
+  text_key: string | null
   designation: string
   stock_available: number
   open_demand: number
@@ -551,6 +574,9 @@ export interface ShortageRisk {
 export interface AiAnalysis {
   generated_at: string
   headline: string
+  /** The headline as a key plus its figures, so the UI words it. */
+  headline_key: string | null
+  headline_values: Record<string, string | number>
   shortage_risks: ShortageRisk[]
   recommendations: Recommendation[]
   priority_count: Record<string, number>

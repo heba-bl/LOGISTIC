@@ -171,7 +171,7 @@ export function KpiCard({ kpi, index, riseIsGood = true, onClick }: KpiCardProps
       {kpi.trend.length <= 1 && (
         /* No honest series exists for this measure, so the tile keeps its height
            without drawing a plausible line. */
-        <p className="mt-2.5 h-6 text-[10px] leading-6 text-ink-3/70">{t('kpi.snapshot')}</p>
+        <p className="mt-2.5 h-6 text-[11px] leading-6 text-ink-3/70">{t('kpi.snapshot')}</p>
       )}
     </Element>
   )

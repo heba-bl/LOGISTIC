@@ -81,7 +81,7 @@ export function AnalyticsMatrix({
                     </span>
                     <RiskChip risk={row.risk} />
                   </div>
-                  <span className="block truncate text-[10px] text-ink-3">
+                  <span className="block truncate text-[11px] text-ink-3">
                     {row.designation}
                   </span>
                 </td>
@@ -113,7 +113,7 @@ export function AnalyticsMatrix({
                       >
                         <span
                           className={cn(
-                            'numeric text-[10px] font-semibold',
+                            'numeric text-[11px] font-semibold',
                             empty ? 'text-ink-3/50' : RAMP_TEXT[step],
                           )}
                         >
@@ -226,7 +226,7 @@ export function WarehouseMap({
                 />
               </div>
 
-              <p className="mt-1.5 flex flex-wrap gap-x-3 text-[10px] text-ink-3">
+              <p className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-ink-3">
                 <span className="numeric">
                   {formatNumber(zone.occupied)} / {formatNumber(zone.capacity)}
                 </span>

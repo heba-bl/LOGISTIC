@@ -67,7 +67,7 @@ ROLES = [
 #: An operator is never anonymous: the employee number identifies every action.
 #: SYNTHETIC identities - demonstration only.
 USERS = [
-    ("OP-1042", "k.moreau", "Karim", "Moreau", RoleName.RECEPTIONIST, Zone.RECEPTION, "Reception"),
+    ("OP-1042", "k.lahlou", "Karim", "Lahlou", RoleName.RECEPTIONIST, Zone.RECEPTION, "Reception"),
     ("OP-1051", "h.bouzid", "Hicham", "Bouzid", RoleName.RECEPTIONIST, Zone.RECEPTION, "Reception"),
     ("RM-004", "f.chaoui", "Fatima", "Chaoui", RoleName.RECEPTION_MANAGER, Zone.RECEPTION, "Reception"),
     ("QL-1045", "s.haddad", "Sara", "Haddad", RoleName.QUALITY_INSPECTOR, Zone.INSPECTION, "Qualite"),
@@ -75,22 +75,22 @@ USERS = [
     ("QM-002", "n.benali", "Nadia", "Benali", RoleName.QUALITY_MANAGER, Zone.QUALITY, "Qualite"),
     ("WH-008", "y.tazi", "Youssef", "Tazi", RoleName.WAREHOUSE_OPERATOR, Zone.WAREHOUSE, "Entrepot"),
     ("WH-M01", "r.alami", "Rachid", "Alami", RoleName.LOGISTICS_MANAGER, Zone.WAREHOUSE, "Entrepot"),
-    ("ST-012", "m.dupont", "Marc", "Dupont", RoleName.STATION_LEADER, Zone.PRODUCTION, "Production"),
-    ("PM-001", "l.ferrand", "Luc", "Ferrand", RoleName.PRODUCTION_MANAGER, Zone.PRODUCTION, "Production"),
+    ("ST-012", "m.bennani", "Mehdi", "Bennani", RoleName.STATION_LEADER, Zone.PRODUCTION, "Production"),
+    ("PM-001", "y.cherkaoui", "Younes", "Cherkaoui", RoleName.PRODUCTION_MANAGER, Zone.PRODUCTION, "Production"),
     ("LM-001", "a.sahli", "Amine", "Sahli", RoleName.LOGISTICS_MANAGER, Zone.LOGISTICS, "Logistique"),
-    ("OP-1063", "n.serrano", "Nora", "Serrano", RoleName.RECEPTIONIST, Zone.RECEPTION, "Reception"),
-    ("OP-1078", "t.lefevre", "Thomas", "Lefevre", RoleName.RECEPTIONIST, Zone.RECEPTION, "Reception"),
+    ("OP-1063", "n.berrada", "Nora", "Berrada", RoleName.RECEPTIONIST, Zone.RECEPTION, "Reception"),
+    ("OP-1078", "t.lamrani", "Tarik", "Lamrani", RoleName.RECEPTIONIST, Zone.RECEPTION, "Reception"),
     ("RM-005", "a.idrissi", "Amal", "Idrissi", RoleName.RECEPTION_MANAGER, Zone.RECEPTION, "Reception"),
-    ("QL-1052", "j.rossi", "Julia", "Rossi", RoleName.QUALITY_INSPECTOR, Zone.INSPECTION, "Qualite"),
+    ("QL-1052", "j.rifai", "Jamila", "Rifai", RoleName.QUALITY_INSPECTOR, Zone.INSPECTION, "Qualite"),
     ("QL-1058", "b.kacem", "Bilal", "Kacem", RoleName.QUALITY_INSPECTOR, Zone.INSPECTION, "Qualite"),
-    ("QL-1064", "e.dubois", "Elodie", "Dubois", RoleName.QUALITY_INSPECTOR, Zone.INSPECTION, "Qualite"),
+    ("QL-1064", "h.doukkali", "Hafsa", "Doukkali", RoleName.QUALITY_INSPECTOR, Zone.INSPECTION, "Qualite"),
     ("QM-003", "s.ouali", "Samir", "Ouali", RoleName.QUALITY_MANAGER, Zone.QUALITY, "Qualite"),
-    ("WH-012", "i.nakache", "Ines", "Nakache", RoleName.WAREHOUSE_OPERATOR, Zone.WAREHOUSE, "Entrepot"),
-    ("WH-019", "d.morel", "David", "Morel", RoleName.WAREHOUSE_OPERATOR, Zone.WAREHOUSE, "Entrepot"),
+    ("WH-012", "i.nakache", "Imane", "Nakache", RoleName.WAREHOUSE_OPERATOR, Zone.WAREHOUSE, "Entrepot"),
+    ("WH-019", "d.moujahid", "Driss", "Moujahid", RoleName.WAREHOUSE_OPERATOR, Zone.WAREHOUSE, "Entrepot"),
     ("WH-024", "z.belkacem", "Zineb", "Belkacem", RoleName.WAREHOUSE_OPERATOR, Zone.WAREHOUSE, "Entrepot"),
-    ("ST-021", "c.navarro", "Clara", "Navarro", RoleName.STATION_LEADER, Zone.PRODUCTION, "Production"),
-    ("ST-034", "p.gauthier", "Paul", "Gauthier", RoleName.STATION_LEADER, Zone.PRODUCTION, "Production"),
-    ("PM-002", "h.lemaire", "Helene", "Lemaire", RoleName.PRODUCTION_MANAGER, Zone.PRODUCTION, "Production"),
+    ("ST-021", "k.naciri", "Kenza", "Naciri", RoleName.STATION_LEADER, Zone.PRODUCTION, "Production"),
+    ("ST-034", "a.ghazali", "Anas", "Ghazali", RoleName.STATION_LEADER, Zone.PRODUCTION, "Production"),
+    ("PM-002", "h.lemseffer", "Houda", "Lemseffer", RoleName.PRODUCTION_MANAGER, Zone.PRODUCTION, "Production"),
     ("LM-002", "k.benjelloun", "Khalid", "Benjelloun", RoleName.LOGISTICS_MANAGER, Zone.LOGISTICS, "Logistique"),
 ]
 
@@ -779,6 +779,102 @@ def summarise(db) -> None:
     print(f"    audit entries ....... {count(AuditLog)}")
 
 
+def seed_import_batches(db, ctx: dict) -> int:
+    """One Excel batch per zone per day, sized from what that day recorded.
+
+    Called after `backdate`, because the batches have to carry the dates the
+    operations ended up with - a sync stamped before the line it carried would
+    be visible in the audit and wrong.
+    """
+    import hashlib
+    from collections import defaultdict
+    from datetime import timedelta
+
+    from app.models.enums import (
+        ImportStatus,
+        ImportType,
+        ValidationDecision,
+    )
+    from app.models.flow import Inspection, Reception
+    from app.models.imports import DataImport
+    from app.models.production import ProductionRequest
+
+    users = ctx["users_by_matricule"]
+
+    # (import type, workbook sheet, the operations it carries, their date)
+    sources = (
+        (ImportType.RECEPTION, "RECEPTION", Reception, Reception.received_at,
+         "OP-1042", "RM-004"),
+        (ImportType.INSPECTION, "INSPECTION", Inspection, Inspection.inspected_at,
+         "QL-1045", "QM-002"),
+        (ImportType.PRODUCTION_REQUEST, "PRODUCTION", ProductionRequest,
+         ProductionRequest.created_on, "ST-012", "PM-001"),
+    )
+
+    now = datetime.now(timezone.utc)
+    created = 0
+    sequence = 0
+    for import_type, sheet, model, stamp, maker_ref, checker_ref in sources:
+        maker = users.get(maker_ref)
+        checker = users.get(checker_ref)
+        if maker is None or checker is None:
+            continue
+
+        per_day: dict = defaultdict(int)
+        for (moment,) in db.execute(select(stamp)).all():
+            if moment is not None:
+                per_day[moment.date()] += 1
+
+        for day in sorted(per_day):
+            rows = per_day[day]
+            sequence += 1
+            # Typed during the shift, signed off at the end of it.
+            submitted = datetime.combine(
+                day, datetime.min.time(), tzinfo=timezone.utc
+            ).replace(hour=15, minute=40)
+            checked = submitted + timedelta(minutes=35)
+            # End of shift is 15:40, but today's shift may not have happened
+            # yet: a batch stamped in the future makes the freshness indicator
+            # read "0 min" forever, which is the one thing it must never do.
+            if checked > now:
+                checked = now - timedelta(minutes=25)
+                submitted = checked - timedelta(minutes=35)
+            db.add(
+                DataImport(
+                    reference=f"IMP-{day:%Y%m%d}-{sequence:03d}",
+                    import_type=import_type,
+                    status=ImportStatus.APPROVED,
+                    source_filename="SLCC_Logistics_Operations.xlsm",
+                    # The digest names the batch, not the file: two zones synced
+                    # the same day are two batches out of one workbook.
+                    source_hash=hashlib.sha256(
+                        f"{sheet}:{day}:{rows}".encode("utf-8")
+                    ).hexdigest(),
+                    source_size_bytes=0,
+                    row_count=rows,
+                    valid_row_count=rows,
+                    invalid_row_count=0,
+                    applied_row_count=rows,
+                    maker_id=maker.id,
+                    maker_reference=maker.employee_number,
+                    maker_role=maker.role.name if maker.role else "",
+                    maker_service=maker.service,
+                    submitted_at=submitted,
+                    checker_id=checker.id,
+                    checker_reference=checker.employee_number,
+                    checker_role=checker.role.name if checker.role else "",
+                    checker_service=checker.service,
+                    checked_at=checked,
+                    decision=ValidationDecision.APPROVED,
+                    notes=f"Feuille {sheet} - synchronisation de fin de poste",
+                )
+            )
+            created += 1
+
+    db.commit()
+    return created
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed the SLCC demonstration dataset")
     parser.add_argument("--reset", action="store_true", help="wipe existing data first")
@@ -816,6 +912,9 @@ def main() -> None:
             f"  history spread over the past days "
             f"({spread['lots']} lots, {spread['requests']} requests, {spread['events']} events)"
         )
+
+        batches = seed_import_batches(db, ctx)
+        print(f"  {batches} Excel sync batches recorded (Fichier operationnel)")
 
         summarise(db)
         print("\nDone.")

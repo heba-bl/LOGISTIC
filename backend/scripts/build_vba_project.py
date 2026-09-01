@@ -126,7 +126,8 @@ def check_module_visibility() -> None:
         )
 
     check_reserved_names(modules)
-    print(f"  {len(modules)} modules: portee et noms de variables verifies")
+    check_declaration_section(modules)
+    print(f"  {len(modules)} modules: portee, declarations et noms verifies")
 
 
 #: Members of the Excel object model that a standard module can reach with no
@@ -174,6 +175,44 @@ def check_reserved_names(modules: dict[str, str]) -> None:
             + "\n".join(faults)
             + "\n  Renommez-les: VBA les resout contre l'objet Excel, pas contre"
             " la declaration locale."
+        )
+
+
+def check_declaration_section(modules: dict[str, str]) -> None:
+    """Refuse module state written after the first procedure.
+
+    VBA only treats a module-level Private/Public/Const as state when it stands
+    in the declarations section. Below a procedure the VBE accepts the line and
+    binds it to nothing, then reports every *use* of the name as undefined - so
+    the error points anywhere except at the real mistake.
+    """
+    import re
+
+    opens_procedure = re.compile(r"^\s*(?:Public |Private )?(?:Sub|Function|Property)\s+\w+")
+    # Unindented, so a local Dim inside a procedure is not caught by mistake.
+    declares_state = re.compile(r"^(?:Private|Public|Global)\s+(?:Const\s+)?(\w+)")
+
+    faults = []
+    for module, source in modules.items():
+        seen_procedure = False
+        for number, line in enumerate(source.splitlines(), 1):
+            if opens_procedure.match(line):
+                seen_procedure = True
+                continue
+            if not seen_procedure:
+                continue
+            # Inside a procedure, Dim is a local and perfectly fine; only the
+            # module-level keywords are wrong here.
+            declaration = declares_state.match(line)
+            if declaration:
+                faults.append(f"    {module} ligne {number}: {declaration.group(1)}")
+
+    if faults:
+        raise SystemExit(
+            "  Des declarations de module sont ecrites sous une procedure:\n"
+            + "\n".join(faults)
+            + "\n  Remontez-les sous Option Explicit: VBA les accepte en silence"
+            "\n  et signale ensuite chaque usage du nom comme non defini."
         )
 
 

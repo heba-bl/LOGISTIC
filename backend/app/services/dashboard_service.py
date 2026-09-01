@@ -6,14 +6,20 @@ flow stages, smart alerts and the activity feed. No figure is hardcoded.
 
 from __future__ import annotations
 
+import json
+
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.timeutils import to_local
-from app.models.enums import AuditAction, LotStatus, ProductionRequestStatus
-from app.models.flow import Lot
+from app.models.enums import (
+    AuditAction,
+    LotStatus,
+    ProductionRequestStatus,
+    ValidationDecision,
+)
 from app.models.production import ProductionRequest
 from app.repositories import (
     AuditRepository,
@@ -72,18 +78,16 @@ def describe_action(action: AuditAction) -> tuple[str, str]:
 
 
 def build_kpis(db: Session) -> list[dict]:
-    """The six Mission Control indicators, all computed from live data."""
+    """The Mission Control indicators: what is true right now, nothing else.
+
+    Every figure here is a snapshot. Anything that only means something over a
+    period - a total, a rate, a trend - belongs to the Analyse screens, and
+    keeping it in both places produced two different numbers for one question.
+    """
     lots = LotRepository(db)
-    stock = StockRepository(db)
     production = ProductionRepository(db)
 
     counts = lots.count_by_status()
-    total_stock = stock.total_quantity()
-    distinct_parts = db.execute(
-        select(func.count()).select_from(
-            select(Lot.part_id).distinct().subquery()
-        )
-    ).scalar_one()
 
     active_lots = sum(
         counts.get(status.value, 0)
@@ -114,19 +118,13 @@ def build_kpis(db: Session) -> list[dict]:
 
     return [
         {
-            "id": "total-stock",
-            "label": "Total Stock",
-            "value": total_stock,
-            "unit": "PCS",
-            "hint": f"{distinct_parts} part references in circulation",
-            "severity": "OK" if total_stock > 0 else "WARNING",
-        },
-        {
             "id": "active-lots",
             "label": "Active Lots",
             "value": active_lots,
             "unit": None,
             "hint": f"{active_lots - stored_lots} in flow · {stored_lots} stored",
+            "hint_key": "kpi.hint.activeLots",
+            "hint_values": {"flowing": active_lots - stored_lots, "stored": stored_lots},
             "severity": "INFO",
         },
         {
@@ -137,19 +135,27 @@ def build_kpis(db: Session) -> list[dict]:
             "hint": (
                 f"{counts.get(LotStatus.QUALITY_PENDING.value, 0)} awaiting quality decision"
             ),
+            "hint_key": "kpi.hint.pendingInspections",
+            "hint_values": {"waiting": counts.get(LotStatus.QUALITY_PENDING.value, 0)},
             "severity": "WARNING" if pending_inspections else "OK",
         },
         {
-            "id": "production-requests",
-            "label": "Production Requests",
-            "value": len(open_requests),
+            # Not "how many requests were raised" - that is a period figure.
+            # What matters live is how many the warehouse cannot serve today.
+            "id": "uncovered-requests",
+            "label": "Uncovered Requests",
+            "value": len(blocked_requests),
             "unit": None,
             "hint": (
-                f"{len(blocked_requests)} not covered by stock"
-                if blocked_requests
-                else "all covered by available stock"
+                f"of {len(open_requests)} open requests"
+                if open_requests
+                else "no open request"
             ),
-            "severity": "CRITICAL" if blocked_requests else "INFO",
+            "hint_key": (
+                "kpi.hint.uncoveredRequests" if open_requests else "kpi.hint.noOpenRequest"
+            ),
+            "hint_values": {"open": len(open_requests)},
+            "severity": "CRITICAL" if blocked_requests else "OK",
         },
         {
             "id": "warehouse-occupancy",
@@ -160,6 +166,8 @@ def build_kpis(db: Session) -> list[dict]:
                 f"{len(occupancy['saturated'])} saturated · "
                 f"{len(occupancy['nearly_full'])} nearly full"
             ),
+            "hint_key": "kpi.hint.warehouse",
+            "hint_values": {"saturated": len(occupancy["saturated"]), "nearlyFull": len(occupancy["nearly_full"])},
             "severity": (
                 "CRITICAL"
                 if occupancy["saturated"]
@@ -179,8 +187,11 @@ def build_kpis(db: Session) -> list[dict]:
                 if critical_alerts
                 else "no critical situation"
             ),
+            "hint_key": "kpi.hint.criticalAlerts",
+            "hint_values": {"redCage": red_cage, "blocked": len(blocked_requests)},
             "severity": "CRITICAL" if critical_alerts else "OK",
         },
+        _sync_freshness(db),
     ]
 
 
@@ -188,6 +199,50 @@ def _stock_of(db: Session, part_id: int) -> int:
     from app.services import stock_service
 
     return stock_service.get_available(db, part_id)
+
+
+def _sync_freshness(db: Session) -> dict:
+    """How long ago the shared workbook last reached SLCC.
+
+    On a plant where Excel is the record and this screen the mirror, a stale
+    sync does not make the figures wrong - it makes them old, which is worse,
+    because nothing on the screen would say so.
+    """
+    from app.models.imports import DataImport
+
+    last = db.execute(
+        select(func.max(DataImport.checked_at)).where(
+            DataImport.decision == ValidationDecision.APPROVED
+        )
+    ).scalar_one_or_none()
+
+    if last is None:
+        return {
+            "id": "excel-sync",
+            "label": "Excel Sync",
+            "value": 0,
+            "unit": None,
+            "hint": "no synchronisation yet",
+            "hint_key": "kpi.hint.excelNever",
+            "hint_values": {},
+            "severity": "WARNING",
+        }
+
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    minutes = max(0, int((datetime.now(timezone.utc) - last).total_seconds() // 60))
+
+    return {
+        "id": "excel-sync",
+        "label": "Excel Sync",
+        "value": minutes,
+        "unit": "min",
+        "hint": "since the last validated batch",
+        "hint_key": "kpi.hint.excelSync",
+        "hint_values": {},
+        # Half a day without a sync is a shift that never sent its file.
+        "severity": "OK" if minutes < 120 else "WARNING" if minutes < 720 else "CRITICAL",
+    }
 
 
 def build_stages(db: Session) -> list[dict]:
@@ -293,6 +348,13 @@ def build_alerts(db: Session) -> list[dict]:
                 "title": "Lot blocked in Red Cage",
                 "message": lot.blocked_reason
                 or f"{lot.lot_number} is quarantined and waiting for a decision.",
+                # When the services composed the reason, the screen words it.
+                "message_key": lot.blocked_reason_key,
+                "message_values": (
+                    json.loads(lot.blocked_reason_values)
+                    if lot.blocked_reason_values
+                    else {}
+                ),
                 "source": f"Quality · {lot.part.reference}",
                 "timestamp": lot.updated_at or now,
                 "lot_number": lot.lot_number,

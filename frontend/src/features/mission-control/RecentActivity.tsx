@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 
 import { EmptyState } from '@/components/ui'
+import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
 import { severityStyles, toSeverity } from '@/utils/status'
@@ -12,8 +13,9 @@ interface RecentActivityProps {
 
 /** Chronological trace of operator actions, read straight from the audit trail. */
 export function RecentActivity({ events }: RecentActivityProps) {
+  const { t } = useI18n()
   if (events.length === 0) {
-    return <EmptyState title="No activity yet" description="Actions will appear here." />
+    return <EmptyState title={t('mission.noActivity')} description={t('mission.noActivityHint')} />
   }
 
   return (
@@ -43,7 +45,7 @@ export function RecentActivity({ events }: RecentActivityProps) {
               <p className="mt-0.5 line-clamp-2 text-2xs leading-relaxed text-ink-3">
                 {event.detail}
               </p>
-              <p className="mt-0.5 text-[10px] text-ink-3/80">{event.actor_name}</p>
+              <p className="mt-0.5 text-[11px] text-ink-3/80">{event.actor_name}</p>
             </div>
           </motion.li>
         )

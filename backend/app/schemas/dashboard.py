@@ -15,7 +15,13 @@ class KpiOut(BaseModel):
     label: str
     value: float
     unit: str | None = None
+    #: English wording, kept so a client that does not know the key still shows
+    #: a sentence rather than an empty line.
     hint: str
+    #: The same sentence as a translation key and its values, so the interface
+    #: can word it in the language the user is actually reading.
+    hint_key: str | None = None
+    hint_values: dict[str, str | int | float] = {}
     severity: str
     ratio: float | None = None
 
@@ -36,6 +42,9 @@ class AlertOut(BaseModel):
     severity: str
     title: str
     message: str
+    #: Set when the reason was composed by the services; the UI words it.
+    message_key: str | None = None
+    message_values: dict = Field(default_factory=dict)
     source: str
     timestamp: UtcDatetime
     lot_number: str | None = None
@@ -190,6 +199,9 @@ class RecommendationOut(ORMModel):
     severity: Severity
     risk_level: RiskLevel | None = None
     priority: int
+    #: Names the detected situation so the interface can word it in the reader's
+    #: language. The three sentences below stay as the fallback.
+    text_key: str | None = None
     title: str
     message: str
     rationale: str
@@ -204,6 +216,8 @@ class RecommendationOut(ORMModel):
 class ShortageRiskOut(BaseModel):
     part_id: int
     part_reference: str
+    #: Names the branch the rating rests on; the interface words it.
+    text_key: str | None = None
     designation: str
     stock_available: int
     open_demand: int
@@ -218,6 +232,9 @@ class ShortageRiskOut(BaseModel):
 class AiAnalysisOut(BaseModel):
     generated_at: UtcDatetime
     headline: str
+    #: The headline as a key plus its figures, so the screen can word it.
+    headline_key: str | None = None
+    headline_values: dict = Field(default_factory=dict)
     shortage_risks: list[ShortageRiskOut]
     recommendations: list[RecommendationOut]
     priority_count: dict[str, int]

@@ -212,6 +212,16 @@ def assess_shortage_risk(
     return {
         "part_id": part.id,
         "part_reference": part.reference,
+        # Names the branch the rating rests on, so the screen can word it.
+        "text_key": (
+            "shortage.exceedsDemand"
+            if projected < 0
+            else "shortage.belowSafety"
+            if part.safety_stock and available < part.safety_stock
+            else "shortage.thinCover"
+            if days_of_cover is not None
+            else "shortage.watch"
+        ),
         "designation": part.designation,
         "stock_available": available,
         "open_demand": demand,
@@ -257,6 +267,21 @@ def shortage_risks(db: Session, *, only_at_risk: bool = False) -> list[dict]:
 
 
 # ------------------------------------------------------------------ 2. prioritisation
+def _shortage_text_key(risk: dict) -> str:
+    """Which situation the rating rests on.
+
+    The interface renders a different sentence for each, so the key follows the
+    same branch the assessment took rather than being a single generic label.
+    """
+    if risk["open_demand"] > risk["stock_available"]:
+        return "shortage.exceedsDemand"
+    if risk["safety_stock"] and risk["stock_available"] < risk["safety_stock"]:
+        return "shortage.belowSafety"
+    if risk["days_of_cover"] is not None:
+        return "shortage.thinCover"
+    return "shortage.watch"
+
+
 def _build(
     kind: RecommendationKind,
     *,
@@ -267,6 +292,7 @@ def _build(
     rationale: str,
     action: str,
     metrics: dict,
+    text_key: str | None = None,
     risk_level: RiskLevel | None = None,
     part_id: int | None = None,
     lot_id: int | None = None,
@@ -274,6 +300,7 @@ def _build(
 ) -> AIRecommendation:
     return AIRecommendation(
         kind=kind,
+        text_key=text_key,
         severity=severity,
         risk_level=risk_level,
         priority=priority,
@@ -319,6 +346,7 @@ def analyse(db: Session) -> list[AIRecommendation]:
                 severity=severity,
                 priority=priority,
                 risk_level=risk["risk_level"],
+                text_key=_shortage_text_key(risk),
                 title=f"Shortage risk on {risk['part_reference']}",
                 message=(
                     f"{risk['part_reference']} presents a "
@@ -353,6 +381,7 @@ def analyse(db: Session) -> list[AIRecommendation]:
                 RecommendationKind.BLOCKED_LOT,
                 severity=Severity.CRITICAL if overdue else Severity.WARNING,
                 priority=2,
+                text_key="blocked.overdue" if overdue else "blocked.waiting",
                 title=f"Lot {lot.lot_number} blocked in Red Cage",
                 message=(
                     f"{lot.lot_number} ({lot.quantity_received} x {lot.part.reference}) "
@@ -395,6 +424,7 @@ def analyse(db: Session) -> list[AIRecommendation]:
                 RecommendationKind.WAREHOUSE_SATURATION,
                 severity=Severity.CRITICAL,
                 priority=3,
+                text_key="saturation.location",
                 title=f"Location {location.code} saturated",
                 message=(
                     f"{location.code} is at {location.occupancy_percent}% "
@@ -555,6 +585,7 @@ def serialise(recommendation: AIRecommendation) -> dict:
         "severity": recommendation.severity,
         "risk_level": recommendation.risk_level,
         "priority": recommendation.priority,
+        "text_key": recommendation.text_key,
         "title": recommendation.title,
         "message": recommendation.message,
         "rationale": recommendation.rationale,
@@ -579,22 +610,34 @@ def build_analysis(db: Session, *, refresh: bool = True) -> dict:
     for recommendation in active:
         counts[str(recommendation.priority)] = counts.get(str(recommendation.priority), 0) + 1
 
+    # The headline is the first sentence a manager reads, so it travels as a key
+    # plus its figures rather than as a finished English sentence.
     high = [risk for risk in risks if risk["risk_level"] is RiskLevel.HIGH]
     if high:
         headline = (
             f"{len(high)} reference(s) at high shortage risk, "
             f"starting with {high[0]['part_reference']}."
         )
+        headline_key = "ai.headline.shortage"
+        headline_values: dict = {"count": len(high), "reference": high[0]["part_reference"]}
     elif counts["2"]:
         headline = f"{counts['2']} blocked situation(s) require a decision."
+        headline_key = "ai.headline.blocked"
+        headline_values = {"count": counts["2"]}
     elif counts["3"]:
         headline = "Flow is healthy; only optimisation opportunities remain."
+        headline_key = "ai.headline.healthy"
+        headline_values = {}
     else:
         headline = "No risk detected: stock covers the confirmed demand."
+        headline_key = "ai.headline.clear"
+        headline_values = {}
 
     return {
         "generated_at": datetime.now(timezone.utc),
         "headline": headline,
+        "headline_key": headline_key,
+        "headline_values": headline_values,
         "shortage_risks": risks,
         "recommendations": [serialise(item) for item in active],
         "priority_count": counts,

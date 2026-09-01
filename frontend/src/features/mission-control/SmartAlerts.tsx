@@ -2,9 +2,11 @@ import { motion } from 'framer-motion'
 import { AlertTriangle, CheckCircle2, Info, ShieldAlert, type LucideIcon } from 'lucide-react'
 
 import { EmptyState } from '@/components/ui'
+import { useI18n } from '@/i18n/I18nProvider'
 import { cn } from '@/utils/cn'
 import { formatTime } from '@/utils/format'
 import { severityStyles, toSeverity } from '@/utils/status'
+import type { MessageKey } from '@/i18n/messages'
 import type { Alert } from '@/types/domain'
 import type { Severity } from '@/types'
 
@@ -15,11 +17,14 @@ const ALERT_ICON: Record<Severity, LucideIcon> = {
   ok: CheckCircle2,
 }
 
-const ALERT_LABEL: Record<Severity, string> = {
-  crit: 'Critical',
-  warn: 'Warning',
-  info: 'Info',
-  ok: 'Normal',
+//: The severity word is read by an operator, so it is translated like the rest
+//: of the interface - a French screen reading "CRITICAL" is the last thing left
+//: in English on this page.
+const ALERT_LABEL: Record<Severity, MessageKey> = {
+  crit: 'severity.crit',
+  warn: 'severity.warn',
+  info: 'severity.info',
+  ok: 'severity.ok',
 }
 
 interface SmartAlertsProps {
@@ -32,12 +37,13 @@ interface SmartAlertsProps {
  * Icon and label always accompany the colour.
  */
 export function SmartAlerts({ alerts }: SmartAlertsProps) {
+  const { t } = useI18n()
   if (alerts.length === 0) {
     return (
       <EmptyState
         icon={<CheckCircle2 className="h-5 w-5 text-ok" />}
-        title="No active alert"
-        description="Stock covers the confirmed demand and no lot is blocked."
+        title={t('mission.noAlerts')}
+        description={t('mission.noAlertsHint')}
       />
     )
   }
@@ -72,13 +78,15 @@ export function SmartAlerts({ alerts }: SmartAlertsProps) {
                 <span
                   className={cn('text-2xs font-bold uppercase tracking-wider', styles.text)}
                 >
-                  {ALERT_LABEL[severity]}
+                  {t(ALERT_LABEL[severity])}
                 </span>
                 <span className="numeric ml-auto shrink-0 text-2xs text-ink-3">
                   {formatTime(alert.timestamp)}
                 </span>
               </div>
-              <p className="mt-1 text-xs leading-relaxed text-ink">{alert.message}</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink">{alert.message_key
+                  ? t(alert.message_key as MessageKey, alert.message_values)
+                  : alert.message}</p>
               <p className="mt-1 text-2xs text-ink-3">{alert.source}</p>
             </div>
           </motion.li>

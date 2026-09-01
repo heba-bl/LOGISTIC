@@ -1,500 +1,344 @@
-import { useState } from 'react'
-import { CheckCircle2, Factory, PackageOpen, Plus, Send, Truck, XCircle } from 'lucide-react'
+import { useMemo } from 'react'
+import { Factory } from 'lucide-react'
 
 import { PageHeader } from '@/components/PageHeader'
+import { Badge, EmptyState, ErrorPanel, LoadingPanel } from '@/components/ui'
+import { ChartCard, RiskChip } from '@/features/analytics/primitives'
+import { Gauge } from '@/features/analytics/circular'
+import { HBarChart, StackedBar } from '@/features/analytics/bars'
 import {
-  Badge,
-  Button,
-  EmptyState,
-  ErrorPanel,
-  Field,
-  Input,
-  LoadingPanel,
-  Modal,
-  Panel,
-  Select,
-  Textarea,
-} from '@/components/ui'
-import { useActor, useApiResource, useToast } from '@/hooks'
+  FilterBar,
+  KpiRow,
+  ReportTable,
+  SourceNote,
+  matches,
+  useFilterState,
+  type SupervisionKpi,
+} from '@/features/supervision/shell'
+import { useApiResource } from '@/hooks'
 import { useI18n } from '@/i18n/I18nProvider'
-import { toErrorMessage } from '@/services/apiClient'
-import { catalogApi, productionApi } from '@/services/slcc.service'
-import { cn } from '@/utils/cn'
-import { formatNumber, formatTimestamp } from '@/utils/format'
-import { prioritySeverity, requestStatusSeverity } from '@/utils/status'
-import type { ProductionRequestRow, ProductionRequestStatus } from '@/types/domain'
+import { productionApi } from '@/services/slcc.service'
+import { formatTimestamp } from '@/utils/format'
+import { requestStatusSeverity } from '@/utils/status'
 
-/** Which action is offered next, given the current workflow state. */
-const NEXT_ACTION: Partial<
-  Record<ProductionRequestStatus, { key: string; label: string; icon: typeof Send }>
-> = {
-  DRAFT: { key: 'submit', label: 'Submit', icon: Send },
-  SUBMITTED: { key: 'approve', label: 'Approve', icon: CheckCircle2 },
-  APPROVED: { key: 'prepare', label: 'Start preparation', icon: PackageOpen },
-  PREPARING: { key: 'ready', label: 'Mark ready', icon: CheckCircle2 },
-  READY: { key: 'issue', label: 'Confirm issue', icon: Truck },
+/** Colour by what the status means in the workflow, not by arrival order. */
+const STATUS_FILL: Record<string, string> = {
+  ISSUED: 'bg-ok',
+  READY: 'bg-seq-3',
+  PREPARING: 'bg-seq-4',
+  APPROVED: 'bg-chart-1',
+  SUBMITTED: 'bg-seq-5',
+  DRAFT: 'bg-line-strong',
+  CANCELLED: 'bg-ink-3/50',
+  REJECTED: 'bg-crit',
 }
 
 /**
- * Production.
+ * Production, as the logistics manager sees it.
  *
- * Full request workflow: DRAFT to ISSUED. Only the final confirmed issue
- * decrements stock — every earlier step leaves the balance untouched.
+ * The lines raised their requests in the workbook and the magasin confirmed
+ * the issues there. The question here is whether logistics is serving what
+ * production asks for, and which requests it cannot.
  */
 export default function Production() {
-  const requests = useApiResource(() => productionApi.list(), [])
-  const parts = useApiResource(() => catalogApi.parts(), [])
-  const stations = useApiResource(() => catalogApi.stations(), [])
+  const { t, ts, formatNumber } = useI18n()
+  const requests = useApiResource(() => productionApi.list(), [], { pollMs: 60_000 })
 
-  const [creating, setCreating] = useState(false)
-  const [rejecting, setRejecting] = useState<ProductionRequestRow | null>(null)
+  const filters = useFilterState(['status', 'station'])
+  const rows = requests.data ?? []
 
-  const { byRole, actorId } = useActor()
-  const toast = useToast()
-  const [busy, setBusy] = useState<number | null>(null)
+  const stations = useMemo(
+    () => [...new Set(rows.map((row) => row.request.station.code))].sort(),
+    [rows],
+  )
 
-  async function advance(row: ProductionRequestRow) {
-    const next = NEXT_ACTION[row.request.status]
-    if (!next) return
+  const visible = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          matches(
+            [
+              row.request.reference,
+              row.request.station.code,
+              row.request.station.name,
+              row.request.part.reference,
+              row.request.part.designation,
+            ],
+            filters.search,
+          ) &&
+          (!filters.values.status || row.request.status === filters.values.status) &&
+          (!filters.values.station || row.request.station.code === filters.values.station),
+      ),
+    [rows, filters.search, filters.values.status, filters.values.station],
+  )
 
-    setBusy(row.request.id)
-    const id = row.request.id
-    const manager = byRole('PRODUCTION_MANAGER')?.id ?? actorId
-    const operator = byRole('WAREHOUSE_OPERATOR')?.id ?? actorId
-    const leader = byRole('STATION_LEADER')?.id ?? actorId
-
-    try {
-      switch (next.key) {
-        case 'submit':
-          await productionApi.submit(id, leader)
-          toast.info(`${row.request.reference} submitted`, 'Waiting for production validation.')
-          break
-        case 'approve':
-          await productionApi.approve(id, manager)
-          toast.success(
-            `${row.request.reference} approved`,
-            'Quantity reserved. Stock is unchanged until the issue is confirmed.',
-          )
-          break
-        case 'prepare':
-          await productionApi.prepare(id, operator)
-          toast.info(`${row.request.reference} in preparation`, 'Warehouse is picking the parts.')
-          break
-        case 'ready':
-          await productionApi.ready(id, operator)
-          toast.info(`${row.request.reference} ready`, 'Waiting for the physical issue.')
-          break
-        case 'issue': {
-          const movement = await productionApi.issue(id, { actor_id: operator })
-          toast.success(
-            `Issue confirmed — stock -${movement.quantity}`,
-            `${movement.part.reference}: ${movement.quantity_before} → ${movement.quantity_after} units.`,
-          )
-          break
-        }
-      }
-      void requests.refresh()
-    } catch (error) {
-      toast.error('Action refused', toErrorMessage(error))
-    } finally {
-      setBusy(null)
+  const summary = useMemo(() => {
+    // A cancelled or rejected request was never meant to be served: counting it
+    // would sink the service rate on a decision somebody took deliberately.
+    const servable = rows.filter(
+      (row) => !['CANCELLED', 'REJECTED'].includes(row.request.status),
+    )
+    const requested = servable.reduce((sum, row) => sum + row.request.quantity_requested, 0)
+    const issued = servable.reduce((sum, row) => sum + row.request.quantity_issued, 0)
+    const uncovered = rows.filter((row) => !row.is_coverable && row.request.status !== 'ISSUED')
+    return {
+      requested,
+      issued,
+      rate: requested ? (issued / requested) * 100 : 100,
+      uncovered: uncovered.length,
+      shortfall: uncovered.reduce((sum, row) => sum + row.shortfall, 0),
+      open: rows.filter((row) =>
+        ['SUBMITTED', 'APPROVED', 'PREPARING', 'READY'].includes(row.request.status),
+      ).length,
     }
-  }
+  }, [rows])
 
-  const open = requests.data?.filter((row) => NEXT_ACTION[row.request.status]) ?? []
-  const closed = requests.data?.filter((row) => !NEXT_ACTION[row.request.status]) ?? []
+  const kpis: SupervisionKpi[] = [
+    {
+      key: 'requests',
+      label: t('prod.title'),
+      value: formatNumber(rows.length),
+      hint: t('prod.kpi.open', { count: summary.open }),
+      severity: 'INFO',
+    },
+    {
+      key: 'issued',
+      label: t('status.ISSUED'),
+      value: formatNumber(summary.issued),
+      unit: t('unit.pcs'),
+      hint: t('production.servedOf', {
+        issued: formatNumber(summary.issued),
+        requested: formatNumber(summary.requested),
+      }),
+      severity: 'OK',
+    },
+    {
+      key: 'uncovered',
+      label: t('card.uncovered.title'),
+      value: formatNumber(summary.uncovered),
+      hint: t('prod.kpi.shortfall', { value: formatNumber(summary.shortfall) }),
+      severity: summary.uncovered ? 'CRITICAL' : 'OK',
+    },
+    {
+      key: 'stations',
+      label: t('prod.kpi.stations'),
+      value: formatNumber(stations.length),
+      hint: t('prod.kpi.stationsHint'),
+      severity: 'INFO',
+    },
+  ]
+
+  const byStatus = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const row of rows) {
+      totals.set(row.request.status, (totals.get(row.request.status) ?? 0) + 1)
+    }
+    return [...totals.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([status, count]) => ({
+        key: status,
+        label: ts(status),
+        value: count,
+        className: STATUS_FILL[status] ?? 'bg-line-strong',
+      }))
+  }, [rows, ts])
+
+  const byStation = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const row of rows) {
+      if (row.request.quantity_issued <= 0) continue
+      const key = row.request.station.code
+      totals.set(key, (totals.get(key) ?? 0) + row.request.quantity_issued)
+    }
+    return [...totals.entries()]
+      .map(([label, value]) => ({ key: label, label, value }))
+      .sort((a, b) => b.value - a.value)
+  }, [rows])
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Production"
-        description="Parts requests from the lines — stock only moves on a confirmed issue."
-        actions={
-          <Button
-            variant="primary"
-            icon={<Plus className="h-3.5 w-3.5" />}
-            onClick={() => setCreating(true)}
-          >
-            New request
-          </Button>
-        }
-      />
+      <PageHeader title={t('prod.title')} description={t('prod.supervisionSubtitle')} />
+      <SourceNote zone="nav.production" />
 
-      <Panel
-        title="Open requests"
-        subtitle={`${open.length} ${open.length === 1 ? 'request' : 'requests'} in the workflow`}
-        bodyClassName=""
-        action={<Factory className="h-3.5 w-3.5 text-ink-3" />}
-      >
-        {requests.initialLoading ? (
-          <LoadingPanel rows={4} />
-        ) : requests.error ? (
+      {requests.initialLoading ? (
+        <div className="panel">
+          <LoadingPanel rows={6} />
+        </div>
+      ) : requests.error ? (
+        <div className="panel">
           <ErrorPanel message={requests.error} onRetry={requests.refresh} />
-        ) : open.length === 0 ? (
-          <EmptyState title="No open request" description="Every request has been processed." />
-        ) : (
-          <RequestTable
-            rows={open}
-            busy={busy}
-            onAdvance={advance}
-            onReject={(row) => setRejecting(row)}
+        </div>
+      ) : (
+        <>
+          <KpiRow items={kpis} />
+
+          <div className="grid gap-4 xl:grid-cols-3">
+            {/* Service rate has a target, so it is read on a gauge. */}
+            <ChartCard
+              title={t('card.serviceRate.title')}
+              question={t('card.serviceRate.question')}
+              bodyClassName="px-5 pb-5 pt-2"
+            >
+              <div className="flex flex-col items-center gap-3">
+                <Gauge
+                  value={summary.rate}
+                  label={t('card.serviceRate.title')}
+                  target={90}
+                  warning={90}
+                  critical={70}
+                  targetLabel={t('gauge.target', { value: 90 })}
+                />
+              </div>
+            </ChartCard>
+
+            {/* Where the requests are in the workflow: one whole, split. */}
+            <ChartCard
+              title={t('card.requestStatus.title')}
+              question={t('card.requestStatus.question')}
+              delay={0.05}
+            >
+              <StackedBar segments={byStatus} emptyMessage={t('card.requestStatus.empty')} />
+            </ChartCard>
+
+            <ChartCard
+              title={t('prod.chart.station')}
+              question={t('prod.chart.stationQuestion')}
+              delay={0.08}
+            >
+              <HBarChart
+                points={byStation}
+                unit={` ${t('unit.pcs')}`}
+                emptyMessage={t('card.consumption.empty')}
+              />
+            </ChartCard>
+          </div>
+
+          <FilterBar
+            search={filters.search}
+            onSearch={filters.setSearch}
+            placeholder={t('prod.searchPlaceholder')}
+            count={t('common.rowsShown', {
+              shown: formatNumber(visible.length),
+              total: formatNumber(rows.length),
+            })}
+            onReset={filters.reset}
+            selects={[
+              {
+                key: 'status',
+                label: t('common.status'),
+                value: filters.values.status,
+                onChange: (value) => filters.set('status', value),
+                options: [
+                  'SUBMITTED',
+                  'APPROVED',
+                  'PREPARING',
+                  'READY',
+                  'ISSUED',
+                  'REJECTED',
+                  'CANCELLED',
+                ].map((value) => ({ value, label: ts(value) })),
+              },
+              {
+                key: 'station',
+                label: t('prod.field.station'),
+                value: filters.values.station,
+                onChange: (value) => filters.set('station', value),
+                options: stations.map((code) => ({ value: code, label: code })),
+              },
+            ]}
           />
-        )}
-      </Panel>
 
-      <Panel
-        title="Closed requests"
-        subtitle={`${closed.length} issued, rejected or cancelled`}
-        bodyClassName=""
-      >
-        {closed.length === 0 ? (
-          <EmptyState title="No closed request yet" />
-        ) : (
-          <RequestTable rows={closed} busy={busy} />
-        )}
-      </Panel>
-
-      <CreateRequestDialog
-        open={creating}
-        onClose={() => setCreating(false)}
-        parts={parts.data ?? []}
-        stations={stations.data ?? []}
-        onCreated={() => {
-          setCreating(false)
-          void requests.refresh()
-        }}
-      />
-
-      {rejecting && (
-        <RejectDialog
-          row={rejecting}
-          onClose={() => setRejecting(null)}
-          onDone={() => {
-            setRejecting(null)
-            void requests.refresh()
-          }}
-        />
+          <ChartCard
+            title={t('prod.report')}
+            question={t('prod.reportQuestion')}
+            bodyClassName="px-0 pb-0"
+            delay={0.11}
+          >
+            <ReportTable
+              minWidth={1020}
+              columns={[
+                { key: 'reference', label: t('common.reference') },
+                { key: 'station', label: t('prod.field.station') },
+                { key: 'part', label: t('recv.col.part') },
+                { key: 'requested', label: t('prod.col.requested'), align: 'right' },
+                { key: 'issued', label: t('status.ISSUED'), align: 'right' },
+                { key: 'stock', label: t('chart.stock'), align: 'right' },
+                { key: 'coverage', label: t('prod.col.coverage') },
+                { key: 'priority', label: t('prod.field.priority') },
+                { key: 'status', label: t('common.status') },
+                { key: 'date', label: t('common.date'), align: 'right' },
+              ]}
+              empty={
+                visible.length === 0 ? (
+                  <div className="px-5 pb-5">
+                    <EmptyState
+                      icon={<Factory className="h-5 w-5" />}
+                      title={t('prod.noOpen')}
+                      description={t('recv.emptyFiltered')}
+                    />
+                  </div>
+                ) : undefined
+              }
+            >
+              {visible.map((row) => (
+                <tr key={row.request.id}>
+                  <td className="numeric font-medium text-ink">{row.request.reference}</td>
+                  <td>
+                    <span className="numeric">{row.request.station.code}</span>
+                    <span className="block truncate text-2xs text-ink-3">
+                      {row.request.station.name}
+                    </span>
+                  </td>
+                  <td>
+                    <span className="numeric">{row.request.part.reference}</span>
+                    <span className="block truncate text-2xs text-ink-3">
+                      {row.request.part.designation}
+                    </span>
+                  </td>
+                  <td className="numeric text-right">
+                    {formatNumber(row.request.quantity_requested)}
+                  </td>
+                  <td className="numeric text-right font-medium text-ink">
+                    {formatNumber(row.request.quantity_issued)}
+                  </td>
+                  <td className="numeric text-right">{formatNumber(row.stock_available)}</td>
+                  <td>
+                    {row.request.status === 'ISSUED' ? (
+                      <span className="text-2xs text-ink-3">—</span>
+                    ) : row.is_coverable ? (
+                      <Badge severity="ok">{t('prod.covered')}</Badge>
+                    ) : (
+                      <Badge severity="crit">
+                        {t('prod.short', { value: formatNumber(row.shortfall) })}
+                      </Badge>
+                    )}
+                  </td>
+                  <td>
+                    <RiskChip
+                      risk={
+                        row.request.priority === 1
+                          ? 'CRITICAL'
+                          : row.request.priority === 2
+                            ? 'WARNING'
+                            : 'INFO'
+                      }
+                      label={`P${row.request.priority}`}
+                    />
+                  </td>
+                  <td>
+                    <Badge severity={requestStatusSeverity[row.request.status]}>
+                      {ts(row.request.status)}
+                    </Badge>
+                  </td>
+                  <td className="numeric text-right text-2xs text-ink-3">
+                    {formatTimestamp(row.request.created_on)}
+                  </td>
+                </tr>
+              ))}
+            </ReportTable>
+          </ChartCard>
+        </>
       )}
     </div>
-  )
-}
-
-function RequestTable({
-  rows,
-  busy,
-  onAdvance,
-  onReject,
-}: {
-  rows: ProductionRequestRow[]
-  busy: number | null
-  onAdvance?: (row: ProductionRequestRow) => void
-  onReject?: (row: ProductionRequestRow) => void
-}) {
-  const { ts } = useI18n()
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[980px] border-collapse text-left">
-        <thead>
-          <tr className="border-b border-line">
-            <th className="eyebrow px-5 py-2.5 font-semibold">Reference</th>
-            <th className="eyebrow px-5 py-2.5 font-semibold">Station</th>
-            <th className="eyebrow px-5 py-2.5 font-semibold">Part</th>
-            <th className="eyebrow px-5 py-2.5 text-right font-semibold">Requested</th>
-            <th className="eyebrow px-5 py-2.5 text-right font-semibold">Stock</th>
-            <th className="eyebrow px-5 py-2.5 font-semibold">Coverage</th>
-            <th className="eyebrow px-5 py-2.5 font-semibold">Priority</th>
-            <th className="eyebrow px-5 py-2.5 font-semibold">Status</th>
-            <th className="eyebrow px-5 py-2.5 text-right font-semibold">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const next = NEXT_ACTION[row.request.status]
-            const Icon = next?.icon
-            return (
-              <tr key={row.request.id} className="border-b border-line/60 last:border-0">
-                <td className="numeric px-5 py-3 text-xs font-medium text-ink">
-                  {row.request.reference}
-                  <span className="block text-2xs font-normal text-ink-3">
-                    {formatTimestamp(row.request.created_on)}
-                  </span>
-                </td>
-                <td className="px-5 py-3">
-                  <span className="numeric text-xs text-ink-2">{row.request.station.code}</span>
-                  <span className="block text-2xs text-ink-3">{row.request.station.name}</span>
-                </td>
-                <td className="px-5 py-3">
-                  <span className="numeric text-xs text-ink-2">{row.request.part.reference}</span>
-                  <span className="block truncate text-2xs text-ink-3">
-                    {row.request.part.designation}
-                  </span>
-                </td>
-                <td className="numeric px-5 py-3 text-right text-xs text-ink">
-                  {formatNumber(row.request.quantity_requested)}
-                  {row.request.quantity_issued > 0 && (
-                    <span className="block text-2xs text-ok-soft">
-                      issued {formatNumber(row.request.quantity_issued)}
-                    </span>
-                  )}
-                </td>
-                <td className="numeric px-5 py-3 text-right text-xs text-ink-2">
-                  {formatNumber(row.stock_available)}
-                </td>
-                <td className="px-5 py-3">
-                  {row.request.status === 'ISSUED' ? (
-                    <span className="text-2xs text-ink-3">—</span>
-                  ) : row.is_coverable ? (
-                    <Badge severity="ok">Covered</Badge>
-                  ) : (
-                    <Badge severity="crit">Short {formatNumber(row.shortfall)}</Badge>
-                  )}
-                </td>
-                <td className="px-5 py-3">
-                  <Badge severity={prioritySeverity[row.request.priority] ?? 'info'}>
-                    P{row.request.priority}
-                  </Badge>
-                </td>
-                <td className="px-5 py-3">
-                  <Badge severity={requestStatusSeverity[row.request.status]}>
-                    {ts(row.request.status)}
-                  </Badge>
-                </td>
-                <td className="px-5 py-3">
-                  <div className="flex justify-end gap-2">
-                    {next && onAdvance && (
-                      <Button
-                        size="sm"
-                        variant={next.key === 'issue' ? 'primary' : 'secondary'}
-                        loading={busy === row.request.id}
-                        icon={Icon ? <Icon className="h-3 w-3" /> : undefined}
-                        onClick={() => onAdvance(row)}
-                      >
-                        {next.label}
-                      </Button>
-                    )}
-                    {onReject && row.request.status === 'SUBMITTED' && (
-                      <Button
-                        size="sm"
-                        variant="danger"
-                        icon={<XCircle className="h-3 w-3" />}
-                        onClick={() => onReject(row)}
-                      >
-                        Reject
-                      </Button>
-                    )}
-                  </div>
-                  {row.request.rejection_reason && (
-                    <p className="mt-1 max-w-[220px] text-right text-2xs text-crit-soft">
-                      {row.request.rejection_reason}
-                    </p>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function CreateRequestDialog({
-  open,
-  onClose,
-  parts,
-  stations,
-  onCreated,
-}: {
-  open: boolean
-  onClose: () => void
-  parts: { id: number; reference: string; designation: string }[]
-  stations: { id: number; code: string; name: string }[]
-  onCreated: () => void
-}) {
-  const { byRole, actorId } = useActor()
-  const toast = useToast()
-
-  const [stationId, setStationId] = useState('')
-  const [partId, setPartId] = useState('')
-  const [quantity, setQuantity] = useState('')
-  const [priority, setPriority] = useState('3')
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function submit() {
-    if (!stationId || !partId || !quantity) {
-      toast.error('Incomplete form', 'Station, reference and quantity are required.')
-      return
-    }
-    setSaving(true)
-    try {
-      const request = await productionApi.create({
-        station_id: Number(stationId),
-        part_id: Number(partId),
-        quantity: Number(quantity),
-        priority: Number(priority),
-        notes: notes || null,
-        actor_id: byRole('STATION_LEADER')?.id ?? actorId,
-        submit_immediately: true,
-      })
-      toast.success(
-        `Request ${request.reference} created`,
-        'Submitted for validation. Stock unchanged — a request never decrements stock.',
-      )
-      setStationId('')
-      setPartId('')
-      setQuantity('')
-      setNotes('')
-      onCreated()
-    } catch (error) {
-      toast.error('Request refused', toErrorMessage(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="New production request"
-      subtitle="Creating a request never decrements stock"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" loading={saving} onClick={() => void submit()}>
-            Create and submit
-          </Button>
-        </>
-      }
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Station" required>
-          <Select value={stationId} onChange={(event) => setStationId(event.target.value)}>
-            <option value="">Select a station…</option>
-            {stations.map((station) => (
-              <option key={station.id} value={station.id}>
-                {station.code} — {station.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        <Field label="Part reference" required>
-          <Select value={partId} onChange={(event) => setPartId(event.target.value)}>
-            <option value="">Select a reference…</option>
-            {parts.map((part) => (
-              <option key={part.id} value={part.id}>
-                {part.reference} — {part.designation}
-              </option>
-            ))}
-          </Select>
-        </Field>
-
-        <Field label="Quantity" required>
-          <Input
-            type="number"
-            min={1}
-            value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
-            placeholder="20"
-          />
-        </Field>
-
-        <Field label="Priority" hint="1 = most urgent">
-          <Select value={priority} onChange={(event) => setPriority(event.target.value)}>
-            <option value="1">P1 — urgent</option>
-            <option value="2">P2 — normal</option>
-            <option value="3">P3 — planned</option>
-          </Select>
-        </Field>
-
-        <Field label="Notes" className="sm:col-span-2">
-          <Textarea
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Context of the requirement…"
-          />
-        </Field>
-      </div>
-    </Modal>
-  )
-}
-
-function RejectDialog({
-  row,
-  onClose,
-  onDone,
-}: {
-  row: ProductionRequestRow
-  onClose: () => void
-  onDone: () => void
-}) {
-  const { byRole, actorId } = useActor()
-  const toast = useToast()
-  const [reason, setReason] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  async function submit() {
-    if (reason.trim().length < 3) {
-      toast.error('Reason required', 'A rejection is never recorded without a reason.')
-      return
-    }
-    setSaving(true)
-    try {
-      await productionApi.reject(
-        row.request.id,
-        reason,
-        byRole('PRODUCTION_MANAGER')?.id ?? actorId,
-      )
-      toast.info(`${row.request.reference} rejected`, reason)
-      onDone()
-    } catch (error) {
-      toast.error('Rejection refused', toErrorMessage(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Reject ${row.request.reference}`}
-      subtitle={`${row.request.quantity_requested} x ${row.request.part.reference} for ${row.request.station.code}`}
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="danger" loading={saving} onClick={() => void submit()}>
-            Reject
-          </Button>
-        </>
-      }
-    >
-      <Field label="Reason" required hint="Recorded in the audit trail">
-        <Textarea
-          value={reason}
-          onChange={(event) => setReason(event.target.value)}
-          placeholder="Requirement not justified for this shift…"
-          rows={4}
-        />
-      </Field>
-
-      <div
-        className={cn(
-          'mt-4 rounded-lg border px-3 py-2.5 text-xs text-ink-2',
-          row.is_coverable ? 'border-line bg-elevated/60' : 'border-crit/35 bg-crit/10',
-        )}
-      >
-        Stock available: <span className="numeric">{formatNumber(row.stock_available)}</span>
-        {!row.is_coverable && (
-          <> — short by <span className="numeric">{formatNumber(row.shortfall)}</span> units.</>
-        )}
-      </div>
-    </Modal>
   )
 }

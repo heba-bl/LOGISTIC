@@ -1,551 +1,330 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Boxes, PackageCheck, Warehouse as WarehouseIcon } from 'lucide-react'
+import { Boxes } from 'lucide-react'
 
 import { PageHeader } from '@/components/PageHeader'
+import { Badge, EmptyState, ErrorPanel, LoadingPanel, Meter, StatusDot } from '@/components/ui'
+import { ChartCard } from '@/features/analytics/primitives'
+import { HBarChart } from '@/features/analytics/bars'
 import {
-  Badge,
-  Button,
-  EmptyState,
-  ErrorPanel,
-  LoadingPanel,
-  Meter,
-  Modal,
-  Panel,
-  StatusDot,
-  Textarea,
-} from '@/components/ui'
-import { LotDetailDrawer } from '@/features/traceability/LotDetailDrawer'
-import { useActor, useApiResource, useToast } from '@/hooks'
+  FilterBar,
+  KpiRow,
+  ReportTable,
+  SourceNote,
+  matches,
+  useFilterState,
+  type SupervisionKpi,
+} from '@/features/supervision/shell'
+import { useApiResource } from '@/hooks'
 import { useI18n } from '@/i18n/I18nProvider'
-import { toErrorMessage } from '@/services/apiClient'
-import { lotsApi, stockApi, warehouseApi } from '@/services/slcc.service'
+import { stockApi, warehouseApi } from '@/services/slcc.service'
 import { cn } from '@/utils/cn'
-import { formatDecimal, formatNumber } from '@/utils/format'
+import { formatDecimal } from '@/utils/format'
 import { toSeverity } from '@/utils/status'
-import type { Lot, StoragePlan, WarehouseLocation } from '@/types/domain'
-import type { Severity } from '@/types'
+import type { WarehouseLocation } from '@/types/domain'
 
-function occupancySeverity(
-  location: WarehouseLocation,
-  warning: number,
-  critical: number,
-): Severity {
-  if (location.occupancy_percent >= critical) return 'crit'
-  if (location.occupancy_percent >= warning) return 'warn'
-  if (location.occupied === 0) return 'info'
-  return 'ok'
+function occupancySeverity(location: WarehouseLocation, warning: number, critical: number) {
+  if (location.occupancy_percent >= critical) return 'crit' as const
+  if (location.occupancy_percent >= warning) return 'warn' as const
+  if (location.occupied === 0) return 'info' as const
+  return 'ok' as const
 }
 
 /**
- * Warehouse.
+ * Warehouse, as the logistics manager sees it.
  *
- * Interactive map of the addresses, storage confirmation for approved lots (the
- * only operation that increments stock) and the live stock table.
+ * Storage was confirmed by a magasinier in the workbook - that confirmation is
+ * what created the stock. This screen reads the consequence: how full the
+ * racks are, what sits on them, and which references are thin.
  */
 export default function Warehouse() {
-  const { ts } = useI18n()
-  const grid = useApiResource(() => warehouseApi.grid(), [])
-  const stock = useApiResource(() => stockApi.list(), [])
-  const toStore = useApiResource(() => lotsApi.list({ status: ['APPROVED'] }), [])
+  const { t, ts, formatNumber } = useI18n()
+  const grid = useApiResource(() => warehouseApi.grid(), [], { pollMs: 60_000 })
+  const stock = useApiResource(() => stockApi.list(), [], { pollMs: 60_000 })
 
-  const [locationId, setLocationId] = useState<number | null>(null)
-  const [storing, setStoring] = useState<Lot | null>(null)
-  const [selectedLotId, setSelectedLotId] = useState<number | null>(null)
+  const filters = useFilterState(['severity', 'category'])
+  const rows = stock.data ?? []
+  const [zoneFilter, setZoneFilter] = useState<string | null>(null)
 
-  function refreshAll() {
-    void grid.refresh()
-    void stock.refresh()
-    void toStore.refresh()
-  }
+  const categories = useMemo(
+    () => [...new Set(rows.map((row) => row.category).filter(Boolean) as string[])].sort(),
+    [rows],
+  )
 
-  const zones = grid.data?.zones ?? []
+  const visible = useMemo(
+    () =>
+      rows.filter(
+        (row) =>
+          matches(
+            [row.reference, row.designation, row.category, row.locations.join(' ')],
+            filters.search,
+          ) &&
+          (!filters.values.severity || row.severity === filters.values.severity) &&
+          (!filters.values.category || row.category === filters.values.category) &&
+          (!zoneFilter || row.locations.some((code) => code.startsWith(`WH-${zoneFilter}`))),
+      ),
+    [rows, filters.search, filters.values.severity, filters.values.category, zoneFilter],
+  )
+
+  const summary = useMemo(() => {
+    const available = visible.reduce((sum, row) => sum + row.quantity_available, 0)
+    const thin = visible.filter((row) => row.severity !== 'OK').length
+    return { available, thin }
+  }, [visible])
+
+  const saturated = useMemo(
+    () =>
+      (grid.data?.locations ?? []).filter(
+        (location) => location.occupancy_percent >= (grid.data?.critical_threshold ?? 100),
+      ).length,
+    [grid.data],
+  )
+
+  const kpis: SupervisionKpi[] = [
+    {
+      key: 'stock',
+      label: t('wh.stock'),
+      value: formatNumber(summary.available),
+      unit: t('unit.pcs'),
+      hint: t('wh.kpi.references', { count: visible.length }),
+      severity: 'OK',
+    },
+    {
+      key: 'occupancy',
+      label: t('wh.globalOccupancy'),
+      value: formatDecimal(grid.data?.occupancy_percent ?? 0),
+      unit: '%',
+      hint: t('wh.kpi.ofCapacity', {
+        value: formatNumber(grid.data?.total_capacity ?? 0),
+      }),
+      severity:
+        (grid.data?.occupancy_percent ?? 0) >= (grid.data?.critical_threshold ?? 90)
+          ? 'CRITICAL'
+          : (grid.data?.occupancy_percent ?? 0) >= (grid.data?.warning_threshold ?? 75)
+            ? 'WARNING'
+            : 'OK',
+    },
+    {
+      key: 'saturated',
+      label: t('wh.kpi.saturated'),
+      value: formatNumber(saturated),
+      hint: t('wh.kpi.ofLocations', { count: grid.data?.locations.length ?? 0 }),
+      severity: saturated ? 'CRITICAL' : 'OK',
+    },
+    {
+      key: 'thin',
+      label: t('wh.kpi.thin'),
+      value: formatNumber(summary.thin),
+      hint: t('wh.kpi.thinHint'),
+      severity: summary.thin ? 'WARNING' : 'OK',
+    },
+  ]
+
+  // Occupancy per zone: the pressure a manager acts on, not per address.
+  const byZone = useMemo(() => {
+    const totals = new Map<string, { occupied: number; capacity: number }>()
+    for (const location of grid.data?.locations ?? []) {
+      const current = totals.get(location.zone) ?? { occupied: 0, capacity: 0 }
+      current.occupied += location.occupied
+      current.capacity += location.capacity
+      totals.set(location.zone, current)
+    }
+    return [...totals.entries()]
+      .map(([zone, value]) => ({
+        key: zone,
+        label: `${t('warehouse.zone')} ${zone}`,
+        value: value.capacity ? Math.round((value.occupied / value.capacity) * 1000) / 10 : 0,
+        caption: `${formatNumber(value.occupied)} / ${formatNumber(value.capacity)}`,
+      }))
+      .sort((a, b) => b.value - a.value)
+  }, [grid.data, t, formatNumber])
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Warehouse"
-        description="Addressing, storage confirmation and available stock."
-        actions={
-          grid.data && (
-            <div className="flex items-center gap-3 rounded-lg border border-line bg-panel px-3 py-2">
-              <div>
-                <p className="eyebrow">Global occupancy</p>
-                <p className="numeric mt-0.5 text-sm font-semibold text-ink">
-                  {formatDecimal(grid.data.occupancy_percent)}%
-                </p>
-              </div>
-              <div className="border-l border-line pl-3 text-right">
-                <p className="numeric text-xs text-ink-2">
-                  {formatNumber(grid.data.total_occupied)}
-                </p>
-                <p className="text-2xs text-ink-3">
-                  of {formatNumber(grid.data.total_capacity)}
-                </p>
-              </div>
-            </div>
-          )
-        }
-      />
+      <PageHeader title={t('wh.title')} description={t('wh.supervisionSubtitle')} />
+      <SourceNote zone="nav.warehouse" />
 
-      {/* Lots awaiting storage */}
-      <Panel
-        title="Approved lots awaiting storage"
-        subtitle={`${toStore.data?.length ?? 0} ${(toStore.data?.length ?? 0) === 1 ? 'lot' : 'lots'} cleared by quality`}
-        bodyClassName=""
-        action={<PackageCheck className="h-3.5 w-3.5 text-ink-3" />}
-      >
-        {toStore.initialLoading ? (
-          <LoadingPanel rows={2} />
-        ) : (toStore.data?.length ?? 0) === 0 ? (
-          <EmptyState
-            title="Nothing to store"
-            description="Every approved lot has been physically stored."
-          />
-        ) : (
-          <ul className="divide-y divide-line">
-            {toStore.data?.map((lot) => (
-              <li key={lot.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-                <button
-                  type="button"
-                  onClick={() => setSelectedLotId(lot.id)}
-                  className="numeric text-xs font-medium text-ink hover:text-accent"
-                >
-                  {lot.lot_number}
-                </button>
-                <span className="numeric text-xs text-ink-2">{lot.part.reference}</span>
-                <span className="text-2xs text-ink-3">{lot.part.designation}</span>
-                <span className="numeric ml-auto text-xs text-ink">
-                  {formatNumber(lot.quantity_approved)} {lot.part.unit}
-                </span>
-                <Button size="sm" variant="primary" onClick={() => setStoring(lot)}>
-                  Confirm storage
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
-
-      {/* Interactive map */}
-      <Panel
-        title="Warehouse map"
-        subtitle={grid.data ? `${grid.data.warehouse_name} — click an address` : 'Loading…'}
-        bodyClassName="p-5"
-        action={<WarehouseIcon className="h-3.5 w-3.5 text-ink-3" />}
-      >
-        {grid.initialLoading ? (
-          <LoadingPanel rows={3} />
-        ) : grid.error ? (
+      {grid.initialLoading || stock.initialLoading ? (
+        <div className="panel">
+          <LoadingPanel rows={6} />
+        </div>
+      ) : grid.error ? (
+        <div className="panel">
           <ErrorPanel message={grid.error} onRetry={grid.refresh} />
-        ) : grid.data ? (
-          <div className="space-y-4">
-            {zones.map((zone) => {
-              const locations = grid.data!.locations.filter((item) => item.zone === zone)
-              return (
-                <div key={zone} className="flex items-start gap-4">
-                  <div className="w-10 shrink-0 pt-3">
-                    <p className="numeric text-sm font-semibold text-ink-3">{zone}</p>
-                  </div>
-                  <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-                    {locations.map((location, index) => {
-                      const severity = occupancySeverity(
-                        location,
-                        grid.data!.warning_threshold,
-                        grid.data!.critical_threshold,
-                      )
-                      return (
-                        <motion.button
-                          key={location.id}
-                          type="button"
-                          initial={{ opacity: 0, scale: 0.96 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.3, delay: index * 0.03 }}
-                          onClick={() => setLocationId(location.id)}
-                          className={cn(
-                            'group rounded-lg border bg-elevated/60 p-3 text-left transition-colors',
-                            severity === 'crit'
-                              ? 'border-crit/40 hover:border-crit/70'
-                              : severity === 'warn'
-                                ? 'border-warn/40 hover:border-warn/70'
-                                : severity === 'ok'
-                                  ? 'border-ok/30 hover:border-ok/60'
-                                  : 'border-line hover:border-line-strong',
-                          )}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="numeric text-xs font-semibold text-ink">
-                              {location.code}
-                            </span>
-                            <StatusDot severity={severity} pulse={severity === 'crit'} />
-                          </div>
-                          <p className="numeric mt-2 text-2xs text-ink-2">
-                            {formatNumber(location.occupied)} / {formatNumber(location.capacity)}
-                          </p>
-                          <Meter
-                            value={location.occupancy_percent}
-                            severity={severity}
-                            label={location.code}
-                            className="mt-2"
-                          />
-                          <p className="numeric mt-1.5 text-[10px] text-ink-3">
-                            {formatDecimal(location.occupancy_percent)}%
-                          </p>
-                        </motion.button>
-                      )
-                    })}
-                  </div>
+        </div>
+      ) : (
+        <>
+          <KpiRow items={kpis} />
+
+          <div className="grid gap-4 xl:grid-cols-3">
+            <ChartCard title={t('wh.chart.zone')} question={t('wh.chart.zoneQuestion')}>
+              <HBarChart
+                points={byZone}
+                unit=" %"
+                max={100}
+                emptyMessage={t('card.warehouse.empty')}
+                selected={zoneFilter}
+                onSelect={(zone) => setZoneFilter((current) => (current === zone ? null : zone))}
+              />
+            </ChartCard>
+
+            {/* The addresses themselves: where a pallet will and will not fit. */}
+            <ChartCard
+              className="xl:col-span-2"
+              title={t('wh.map')}
+              question={t('wh.mapQuestion')}
+              delay={0.05}
+            >
+              {grid.data && (
+                <div className="space-y-3">
+                  {grid.data.zones.map((zone) => (
+                    <div key={zone} className="flex items-start gap-3">
+                      <span className="numeric w-8 shrink-0 pt-2 text-sm font-semibold text-ink-3">
+                        {zone}
+                      </span>
+                      <div className="grid flex-1 grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-8">
+                        {grid.data!.locations
+                          .filter((location) => location.zone === zone)
+                          .map((location) => {
+                            const severity = occupancySeverity(
+                              location,
+                              grid.data!.warning_threshold,
+                              grid.data!.critical_threshold,
+                            )
+                            return (
+                              <div
+                                key={location.id}
+                                title={`${location.code} · ${formatNumber(location.occupied)}/${formatNumber(location.capacity)}`}
+                                className={cn(
+                                  'rounded-md border bg-elevated/60 p-2',
+                                  severity === 'crit'
+                                    ? 'border-crit/40'
+                                    : severity === 'warn'
+                                      ? 'border-warn/40'
+                                      : severity === 'ok'
+                                        ? 'border-ok/30'
+                                        : 'border-line',
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="numeric text-[11px] font-semibold text-ink">
+                                    {location.code}
+                                  </span>
+                                  <StatusDot severity={severity} />
+                                </div>
+                                <Meter
+                                  value={location.occupancy_percent}
+                                  severity={severity}
+                                  label={location.code}
+                                  className="mt-1.5"
+                                />
+                                <p className="numeric mt-1 text-[11px] text-ink-3">
+                                  {formatDecimal(location.occupancy_percent)} %
+                                </p>
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              )
+              )}
+            </ChartCard>
+          </div>
+
+          <FilterBar
+            search={filters.search}
+            onSearch={filters.setSearch}
+            placeholder={t('wh.searchPlaceholder')}
+            count={t('common.rowsShown', {
+              shown: formatNumber(visible.length),
+              total: formatNumber(rows.length),
             })}
-
-            <div className="flex flex-wrap items-center gap-4 border-t border-line pt-3 text-2xs text-ink-3">
-              <span className="flex items-center gap-1.5">
-                <StatusDot severity="info" /> empty
-              </span>
-              <span className="flex items-center gap-1.5">
-                <StatusDot severity="ok" /> normal
-              </span>
-              <span className="flex items-center gap-1.5">
-                <StatusDot severity="warn" /> above {grid.data.warning_threshold}%
-              </span>
-              <span className="flex items-center gap-1.5">
-                <StatusDot severity="crit" /> saturated above {grid.data.critical_threshold}%
-              </span>
-            </div>
-          </div>
-        ) : null}
-      </Panel>
-
-      {/* Stock */}
-      <Panel
-        title="Available stock"
-        subtitle={`${stock.data?.length ?? 0} references`}
-        bodyClassName=""
-        action={<Boxes className="h-3.5 w-3.5 text-ink-3" />}
-      >
-        {stock.initialLoading ? (
-          <LoadingPanel rows={5} />
-        ) : (stock.data?.length ?? 0) === 0 ? (
-          <EmptyState title="No stock yet" description="Confirm a storage to create stock." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] border-collapse text-left">
-              <thead>
-                <tr className="border-b border-line">
-                  <th className="eyebrow px-5 py-2.5 font-semibold">Reference</th>
-                  <th className="eyebrow px-5 py-2.5 font-semibold">Category</th>
-                  <th className="eyebrow px-5 py-2.5 text-right font-semibold">Available</th>
-                  <th className="eyebrow px-5 py-2.5 text-right font-semibold">Reserved</th>
-                  <th className="eyebrow px-5 py-2.5 text-right font-semibold">Safety</th>
-                  <th className="eyebrow px-5 py-2.5 text-right font-semibold">Demand</th>
-                  <th className="eyebrow px-5 py-2.5 text-right font-semibold">Cover</th>
-                  <th className="eyebrow px-5 py-2.5 font-semibold">Addresses</th>
-                  <th className="eyebrow px-5 py-2.5 font-semibold">State</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stock.data?.map((row) => (
-                  <tr key={row.part_id} className="border-b border-line/60 last:border-0">
-                    <td className="px-5 py-3">
-                      <span className="numeric text-xs font-medium text-ink">
-                        {row.reference}
-                      </span>
-                      <span className="block truncate text-2xs text-ink-3">
-                        {row.designation}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-2xs text-ink-3">{row.category ?? '—'}</td>
-                    <td className="numeric px-5 py-3 text-right text-xs font-semibold text-ink">
-                      {formatNumber(row.quantity_available)}
-                    </td>
-                    <td className="numeric px-5 py-3 text-right text-xs text-ink-2">
-                      {formatNumber(row.quantity_reserved)}
-                    </td>
-                    <td className="numeric px-5 py-3 text-right text-xs text-ink-3">
-                      {formatNumber(row.safety_stock)}
-                    </td>
-                    <td className="numeric px-5 py-3 text-right text-xs text-ink-2">
-                      {formatNumber(row.open_demand)}
-                    </td>
-                    <td className="numeric px-5 py-3 text-right text-xs text-ink-2">
-                      {row.days_of_cover !== null ? `${row.days_of_cover} d` : '—'}
-                    </td>
-                    <td className="numeric px-5 py-3 text-2xs text-ink-3">
-                      {row.locations.join(', ') || '—'}
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge severity={toSeverity(row.severity)}>
-                        {ts(row.severity)}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-
-      {locationId !== null && (
-        <LocationDialog locationId={locationId} onClose={() => setLocationId(null)} />
-      )}
-
-      {storing && (
-        <StorageDialog
-          lot={storing}
-          onClose={() => setStoring(null)}
-          onDone={() => {
-            setStoring(null)
-            refreshAll()
-          }}
-        />
-      )}
-
-      <LotDetailDrawer lotId={selectedLotId} onClose={() => setSelectedLotId(null)} />
-    </div>
-  )
-}
-
-function LocationDialog({ locationId, onClose }: { locationId: number; onClose: () => void }) {
-  const detail = useApiResource(() => warehouseApi.location(locationId), [locationId])
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={detail.data ? `Address ${detail.data.code}` : 'Address'}
-      subtitle="Capacity, occupancy and content"
-    >
-      {detail.initialLoading ? (
-        <LoadingPanel rows={3} />
-      ) : detail.error ? (
-        <ErrorPanel message={detail.error} onRetry={detail.refresh} />
-      ) : detail.data ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Metric label="Capacity" value={formatNumber(detail.data.capacity)} />
-            <Metric label="Occupied" value={formatNumber(detail.data.occupied)} />
-            <Metric label="Free" value={formatNumber(detail.data.free_capacity)} />
-            <Metric label="Occupancy" value={`${formatDecimal(detail.data.occupancy_percent)}%`} />
-          </div>
-
-          <Meter
-            value={detail.data.occupancy_percent}
-            severity={toSeverity(detail.data.severity)}
-            label={detail.data.code}
+            onReset={() => {
+              filters.reset()
+              setZoneFilter(null)
+            }}
+            selects={[
+              {
+                key: 'severity',
+                label: t('wh.col.state'),
+                value: filters.values.severity,
+                onChange: (value) => filters.set('severity', value),
+                options: ['OK', 'WARNING', 'CRITICAL'].map((value) => ({
+                  value,
+                  label: ts(value),
+                })),
+              },
+              {
+                key: 'category',
+                label: t('wh.col.category'),
+                value: filters.values.category,
+                onChange: (value) => filters.set('category', value),
+                options: categories.map((name) => ({ value: name, label: name })),
+              },
+            ]}
           />
 
-          <div>
-            <p className="eyebrow mb-2">References stored</p>
-            {detail.data.references.length === 0 ? (
-              <p className="text-xs text-ink-3">This address is empty.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {detail.data.references.map((reference) => (
-                  <span
-                    key={reference}
-                    className="numeric rounded border border-line bg-elevated px-2 py-0.5 text-2xs text-ink-2"
-                  >
-                    {reference}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div>
-            <p className="eyebrow mb-2">Lots held ({detail.data.lots.length})</p>
-            <ul className="space-y-1.5">
-              {detail.data.lots.map((lot) => (
-                <li
-                  key={lot.id}
-                  className="flex items-center gap-2 rounded border border-line bg-elevated/60 px-2.5 py-2"
-                >
-                  <span className="numeric text-2xs text-ink">{lot.lot_number}</span>
-                  <span className="numeric text-2xs text-ink-3">{lot.part.reference}</span>
-                  <span className="numeric ml-auto text-2xs text-ink-2">
-                    {formatNumber(lot.quantity_available)} {lot.part.unit}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-    </Modal>
-  )
-}
-
-function StorageDialog({
-  lot,
-  onClose,
-  onDone,
-}: {
-  lot: Lot
-  onClose: () => void
-  onDone: () => void
-}) {
-  const plan = useApiResource<StoragePlan>(() => warehouseApi.storagePlan(lot.id), [lot.id])
-  const { byRole, actorId } = useActor()
-  const toast = useToast()
-  const operator = byRole('WAREHOUSE_OPERATOR')
-
-  const [overrides, setOverrides] = useState<Record<number, number>>({})
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-
-  const allocations = useMemo(() => {
-    if (!plan.data) return []
-    return plan.data.suggestions.map((item) => ({
-      ...item,
-      quantity: overrides[item.location_id] ?? item.quantity,
-    }))
-  }, [plan.data, overrides])
-
-  const total = allocations.reduce((sum, item) => sum + item.quantity, 0)
-  const expected = plan.data?.quantity_to_store ?? 0
-  const balanced = total === expected
-
-  async function submit() {
-    if (!balanced) {
-      toast.error(
-        'Quantities do not add up',
-        `Allocated ${total} for ${expected} approved units.`,
-      )
-      return
-    }
-    setSaving(true)
-    try {
-      const movements = await warehouseApi.confirmStorage(lot.id, {
-        allocations: allocations
-          .filter((item) => item.quantity > 0)
-          .map((item) => ({ location_id: item.location_id, quantity: item.quantity })),
-        actor_id: operator?.id ?? actorId,
-        notes: notes || null,
-      })
-      const added = movements.reduce((sum, movement) => sum + movement.quantity, 0)
-      toast.success(
-        `Storage confirmed — stock +${added}`,
-        `${lot.part.reference}: ${movements[0]?.quantity_before ?? 0} → ${
-          movements[movements.length - 1]?.quantity_after ?? added
-        } units.`,
-      )
-      onDone()
-    } catch (error) {
-      toast.error('Storage refused', toErrorMessage(error))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Confirm storage — ${lot.lot_number}`}
-      subtitle="This is the only operation that increments stock"
-      width="lg"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            loading={saving}
-            disabled={!balanced}
-            onClick={() => void submit()}
+          <ChartCard
+            title={t('wh.report')}
+            question={t('wh.reportQuestion')}
+            bodyClassName="px-0 pb-0"
+            delay={0.08}
           >
-            Confirm and increment stock
-          </Button>
-        </>
-      }
-    >
-      {plan.initialLoading ? (
-        <LoadingPanel rows={3} />
-      ) : plan.error ? (
-        <ErrorPanel message={plan.error} onRetry={plan.refresh} />
-      ) : plan.data ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <Metric label="Part" value={plan.data.part_reference} />
-            <Metric label="To store" value={formatNumber(plan.data.quantity_to_store)} />
-            <Metric label="Allocated" value={formatNumber(total)} />
-          </div>
-
-          {!plan.data.fully_allocatable && (
-            <div className="rounded-lg border border-crit/35 bg-crit/10 px-3 py-2.5 text-xs text-ink-2">
-              The warehouse does not have enough free capacity for the whole quantity. Free space
-              or reduce the allocation.
-            </div>
-          )}
-
-          <div>
-            <p className="eyebrow mb-2">
-              Proposed allocation — primary address first, then secondary
-            </p>
-            <ul className="space-y-2">
-              {allocations.map((item) => (
-                <li
-                  key={item.location_id}
-                  className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-elevated/60 px-3 py-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="numeric text-xs font-semibold text-ink">
-                        {item.location_code}
-                      </span>
-                      <Badge severity={item.role === 'PRIMARY' ? 'ok' : 'info'}>
-                        {item.role === 'PRIMARY' ? 'Primary' : 'Secondary'}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-2xs text-ink-3">{item.rationale}</p>
+            <ReportTable
+              minWidth={980}
+              columns={[
+                { key: 'reference', label: t('common.reference') },
+                { key: 'category', label: t('wh.col.category') },
+                { key: 'available', label: t('wh.col.available'), align: 'right' },
+                { key: 'reserved', label: t('wh.col.reserved'), align: 'right' },
+                { key: 'safety', label: t('wh.col.safety'), align: 'right' },
+                { key: 'demand', label: t('wh.col.demand'), align: 'right' },
+                { key: 'cover', label: t('wh.col.cover'), align: 'right' },
+                { key: 'addresses', label: t('wh.col.addresses') },
+                { key: 'state', label: t('wh.col.state') },
+              ]}
+              empty={
+                visible.length === 0 ? (
+                  <div className="px-5 pb-5">
+                    <EmptyState
+                      icon={<Boxes className="h-5 w-5" />}
+                      title={t('wh.noStock')}
+                      description={t('recv.emptyFiltered')}
+                    />
                   </div>
-                  <input
-                    type="number"
-                    min={0}
-                    max={item.free_capacity}
-                    value={item.quantity}
-                    onChange={(event) =>
-                      setOverrides((current) => ({
-                        ...current,
-                        [item.location_id]: Number(event.target.value),
-                      }))
-                    }
-                    className="numeric w-24 rounded border border-line bg-panel px-2 py-1.5 text-right text-xs text-ink focus:border-accent/60 focus:outline-none"
-                  />
-                </li>
+                ) : undefined
+              }
+            >
+              {visible.map((row) => (
+                <tr key={row.part_id}>
+                  <td>
+                    <span className="numeric font-medium text-ink">{row.reference}</span>
+                    <span className="block truncate text-2xs text-ink-3">{row.designation}</span>
+                  </td>
+                  <td className="text-2xs">{row.category ?? '—'}</td>
+                  <td className="numeric text-right font-semibold text-ink">
+                    {formatNumber(row.quantity_available)}
+                  </td>
+                  <td className="numeric text-right">{formatNumber(row.quantity_reserved)}</td>
+                  <td className="numeric text-right text-ink-3">
+                    {formatNumber(row.safety_stock)}
+                  </td>
+                  <td className="numeric text-right">{formatNumber(row.open_demand)}</td>
+                  <td className="numeric text-right">
+                    {row.days_of_cover !== null
+                      ? t('chart.coverageDays', { days: row.days_of_cover })
+                      : '—'}
+                  </td>
+                  <td className="numeric text-2xs">{row.locations.join(', ') || '—'}</td>
+                  <td>
+                    <Badge severity={toSeverity(row.severity)}>{ts(row.severity)}</Badge>
+                  </td>
+                </tr>
               ))}
-            </ul>
-          </div>
-
-          {!balanced && (
-            <p className="text-2xs text-warn-soft">
-              The allocated total ({total}) must match the approved quantity ({expected}).
-            </p>
-          )}
-
-          <div>
-            <p className="eyebrow mb-1.5">Notes</p>
-            <Textarea
-              value={notes}
-              onChange={(event) => setNotes(event.target.value)}
-              placeholder="Storage conditions, pallet number…"
-              rows={2}
-            />
-          </div>
-        </div>
-      ) : null}
-    </Modal>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-2xs text-ink-3">{label}</p>
-      <p className="numeric mt-0.5 text-xs font-semibold text-ink">{value}</p>
+            </ReportTable>
+          </ChartCard>
+        </>
+      )}
     </div>
   )
 }

@@ -333,7 +333,7 @@ export default function FichierOperationnel() {
                     className="h-full rounded-full bg-chart-1"
                   />
                 </div>
-                <p className="mt-1.5 flex flex-wrap gap-x-4 text-[10px] text-ink-3">
+                <p className="mt-1.5 flex flex-wrap gap-x-4 text-[11px] text-ink-3">
                   <span>
                     {t('excel.warehouse.locations')} :{' '}
                     <span className="numeric">
@@ -469,7 +469,7 @@ export default function FichierOperationnel() {
                       />
                     </div>
 
-                    <p className="mt-2 flex flex-wrap gap-x-4 text-[10px] text-ink-3">
+                    <p className="mt-2 flex flex-wrap gap-x-4 text-[11px] text-ink-3">
                       <span className="numeric">
                         {t('excel.history.source')} : {entry.source_filename}
                       </span>
@@ -530,7 +530,7 @@ export default function FichierOperationnel() {
 function Meta({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <dt className="text-[10px] uppercase tracking-widest2 text-ink-3">{label}</dt>
+      <dt className="text-[11px] uppercase tracking-widest2 text-ink-3">{label}</dt>
       <dd className="numeric mt-0.5 text-xs font-medium text-ink">{value ?? '—'}</dd>
     </div>
   )
@@ -585,7 +585,7 @@ function Chip({ label, value, tone }: { label: string; value: number; tone: Seve
   return (
     <div className={cn('rounded border px-1.5 py-1', tones[tone] ?? tones.info)}>
       <p className="numeric text-xs font-semibold">{value}</p>
-      <p className="truncate text-[9px] text-ink-3">{label}</p>
+      <p className="truncate text-[11px] text-ink-3">{label}</p>
     </div>
   )
 }
@@ -607,9 +607,9 @@ function Signature({
     tone === 'ok' ? 'border-ok/25' : tone === 'crit' ? 'border-crit/25' : 'border-info/25'
   return (
     <div className={cn('rounded border bg-panel px-2.5 py-2', border)}>
-      <p className="text-[10px] uppercase tracking-widest2 text-ink-3">{label}</p>
+      <p className="text-[11px] uppercase tracking-widest2 text-ink-3">{label}</p>
       <p className="numeric mt-0.5 text-xs font-semibold text-ink">{matricule ?? '—'}</p>
-      <p className="text-[10px] text-ink-3">
+      <p className="text-[11px] text-ink-3">
         {role ? role.replace(/_/g, ' ').toLowerCase() : '—'}
         {moment ? ` · ${moment}` : ''}
       </p>

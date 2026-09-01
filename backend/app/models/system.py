@@ -97,6 +97,11 @@ class AIRecommendation(Base, TimestampMixin):
     #: 1 = treat first.
     priority: Mapped[int] = mapped_column(Integer, default=3, nullable=False, index=True)
 
+    #: Names the situation the engine detected, so the interface can render
+    #: the wording in the reader's language. The sentences below stay as the
+    #: fallback for a row written before its translation existed.
+    text_key: Mapped[str | None] = mapped_column(String(60))
+
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     #: Why the engine reached this conclusion, in plain language.

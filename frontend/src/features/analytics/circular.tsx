@@ -115,7 +115,7 @@ export function DonutChart({
             <p className="numeric text-2xl font-semibold leading-none tracking-tight text-ink">
               {centreValue}
             </p>
-            <p className="mt-1 px-6 text-[10px] uppercase tracking-widest2 text-ink-3">
+            <p className="mt-1 px-6 text-[11px] uppercase tracking-widest2 text-ink-3">
               {centreLabel}
             </p>
           </div>
@@ -134,7 +134,7 @@ export function DonutChart({
                 onClick={onSelect ? () => onSelect(segment.key) : undefined}
                 aria-pressed={onSelect ? active : undefined}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-2xs transition-colors',
+                  'min-h-[36px] flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-2xs transition-colors',
                   active
                     ? 'border-accent/40 bg-accent/[0.06]'
                     : 'border-transparent hover:border-line hover:bg-elevated',
@@ -279,7 +279,7 @@ export function Gauge({
         </div>
       </div>
       <p className="mt-1 text-center text-2xs text-ink-2">{label}</p>
-      {targetLabel && <p className="numeric mt-0.5 text-[10px] text-ink-3">{targetLabel}</p>}
+      {targetLabel && <p className="numeric mt-0.5 text-[11px] text-ink-3">{targetLabel}</p>}
     </div>
   )
 }
@@ -408,7 +408,7 @@ export function AnalyticsPie({
                 onClick={onSelect ? () => onSelect(segment.key) : undefined}
                 aria-pressed={onSelect ? active : undefined}
                 className={cn(
-                  'flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-2xs transition-colors',
+                  'min-h-[36px] flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-2xs transition-colors',
                   active
                     ? 'border-accent/40 bg-accent/[0.06]'
                     : 'border-transparent hover:border-line hover:bg-elevated',
