@@ -1,18 +1,15 @@
 import { useState } from 'react'
-import { Monitor, Moon, Save, Settings as SettingsIcon, Sun, Users } from 'lucide-react'
+import { Monitor, Moon, Save, Settings as SettingsIcon, Sun } from 'lucide-react'
 
 import { PageHeader } from '@/components/PageHeader'
-import { SimulationPanel } from '@/features/simulation/SimulationPanel'
 import {
-  Badge,
   Button,
   ErrorPanel,
   Input,
   LoadingPanel,
   Panel,
-  StatusDot,
 } from '@/components/ui'
-import { useActor, useApiResource, useToast } from '@/hooks'
+import { useApiResource, useToast } from '@/hooks'
 import { useTheme, type ThemeChoice } from '@/hooks/useTheme'
 import { useI18n } from '@/i18n/I18nProvider'
 import type { Locale, MessageKey } from '@/i18n/messages'
@@ -47,8 +44,6 @@ export default function Settings() {
   const { t } = useI18n()
   const settingText = useSettingText()
   const settings = useApiResource(() => catalogApi.settings(), [])
-  const parts = useApiResource(() => catalogApi.parts(), [])
-  const suppliers = useApiResource(() => catalogApi.suppliers(), [])
 
   const groups = (settings.data ?? []).reduce<Record<string, Setting[]>>((acc, setting) => {
     acc[setting.group] = [...(acc[setting.group] ?? []), setting]
@@ -59,19 +54,22 @@ export default function Settings() {
     <div className="space-y-4">
       <PageHeader title={t('settings.title')} description={t('settings.subtitle')} />
 
-      <AppearancePanel />
-      <OperatorPanel />
+      {/* Two panels used to sit here and both contradicted what this site is.
 
-      {/* The end-to-end simulation lives here, not on Mission Control.
-          It writes to the database through the real services, which is exactly
-          what a supervision screen must never appear to do - having it beside
-          live figures invited the reader to doubt they were real. */}
-      <Panel
-        title={t('settings.demonstration')}
-        subtitle={t('settings.demonstrationSubtitle')}
-      >
-        <SimulationPanel />
-      </Panel>
+          The end-to-end simulation created lots, inspections and quality
+          decisions through the real services and committed them - production
+          manufactured from the supervision screen, which is precisely what the
+          workbook is for. The endpoint remains, reachable from a terminal like
+          the seed script: it is a way to prepare a demonstration, not a feature
+          of the product.
+
+          "Acting as" let a signed-in manager pick another operator's identity,
+          which emptied the login of its meaning: you authenticate as LM-001 and
+          two clicks later you are QL-1045. */}
+      {/* The catalogue and the suppliers moved to /referentiel. They were
+          never settings - nothing here is configured, it is consulted - and a
+          2 239 row table with no search box is a table nobody uses. */}
+      <AppearancePanel />
 
       <Panel
         title={t('settings.businessRules')}
@@ -104,81 +102,6 @@ export default function Settings() {
       </Panel>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Panel
-          title={t('settings.parts')}
-          subtitle={`${parts.data?.length ?? 0} references — tolerance class per part`}
-          bodyClassName=""
-        >
-          {parts.initialLoading ? (
-            <LoadingPanel rows={4} />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-line">
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Reference</th>
-                    <th className="eyebrow px-5 py-2.5 font-semibold">Class</th>
-                    <th className="eyebrow px-5 py-2.5 text-right font-semibold">Tolerance</th>
-                    <th className="eyebrow px-5 py-2.5 text-right font-semibold">Safety</th>
-                    <th className="eyebrow px-5 py-2.5 text-right font-semibold">{t('settings.dailyUse')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {parts.data?.map((part) => (
-                    <tr key={part.id} className="border-b border-line/60 last:border-0">
-                      <td className="px-5 py-2.5">
-                        <span className="numeric text-xs text-ink">{part.reference}</span>
-                        <span className="block truncate text-2xs text-ink-3">
-                          {part.designation}
-                        </span>
-                      </td>
-                      <td className="px-5 py-2.5">
-                        <Badge severity={part.size_class === 'LARGE' ? 'warn' : 'info'}>
-                          {part.size_class === 'LARGE' ? 'Large' : 'Small'}
-                        </Badge>
-                      </td>
-                      <td className="numeric px-5 py-2.5 text-right text-2xs text-ink-2">
-                        {part.reception_tolerance_percent !== null
-                          ? `${part.reception_tolerance_percent}% (override)`
-                          : part.size_class === 'LARGE'
-                            ? 'exact'
-                            : 'default'}
-                      </td>
-                      <td className="numeric px-5 py-2.5 text-right text-2xs text-ink-2">
-                        {part.safety_stock}
-                      </td>
-                      <td className="numeric px-5 py-2.5 text-right text-2xs text-ink-2">
-                        {part.average_daily_consumption}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Panel>
-
-        <Panel
-          title={t('settings.suppliers')}
-          subtitle={`${suppliers.data?.length ?? 0} active suppliers`}
-          bodyClassName=""
-        >
-          {suppliers.initialLoading ? (
-            <LoadingPanel rows={4} />
-          ) : (
-            <ul className="divide-y divide-line">
-              {suppliers.data?.map((supplier) => (
-                <li key={supplier.id} className="flex items-center gap-3 px-5 py-3">
-                  <span className="numeric text-xs text-ink-2">{supplier.code}</span>
-                  <span className="text-xs text-ink">{supplier.name}</span>
-                  <span className="ml-auto text-2xs text-ink-3">
-                    {supplier.country} · {supplier.lead_time_days} d lead time
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
       </div>
     </div>
   )
@@ -304,52 +227,3 @@ function AppearancePanel() {
   )
 }
 
-/** Simulated identity picker: roles are simulated, actions are attributed. */
-function OperatorPanel() {
-  const { t } = useI18n()
-  const { users, actor, setActor, loading } = useActor()
-
-  return (
-    <Panel
-      title={t('settings.actingAs')}
-      subtitle={t('settings.actingAsSubtitle')}
-      action={<Users className="h-3.5 w-3.5 text-ink-3" />}
-    >
-      {loading ? (
-        <LoadingPanel rows={2} />
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {users.map((user) => {
-            const active = actor?.id === user.id
-            return (
-              <button
-                key={user.id}
-                type="button"
-                onClick={() => setActor(user)}
-                className={cn(
-                  'flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors',
-                  active
-                    ? 'border-accent/50 bg-accent-dim'
-                    : 'border-line bg-elevated hover:border-line-strong',
-                )}
-              >
-                <StatusDot severity={active ? 'ok' : 'info'} />
-                <span className="min-w-0">
-                  <span className="numeric block text-2xs font-semibold text-accent/90">
-                    {user.employee_number}
-                  </span>
-                  <span className="block text-xs font-medium text-ink">{user.full_name}</span>
-                  <span className="block text-2xs text-ink-3">
-                    {user.role?.label ?? 'No role'}
-                    {user.service ? ` · ${user.service}` : ''}
-                    {user.role?.can_validate ? ` · ${t('settings.canValidate')}` : ''}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      )}
-    </Panel>
-  )
-}

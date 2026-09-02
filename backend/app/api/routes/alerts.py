@@ -7,15 +7,59 @@ supervision: saying who is watching, so an alert stops being a number that only
 grows.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session
 from app.models.enums import AlertAction
+from app.schemas.dashboard import AlertOut
 from app.services import alert_service
+from app.services.dashboard_service import build_alerts
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+
+
+class AlertListOut(BaseModel):
+    """Every alert, not the shortlist Mission Control shows.
+
+    The dashboard deliberately keeps eight, one per kind, so no single situation
+    fills the panel. That is right for a dashboard and wrong for working through
+    a backlog: taking eight in charge only makes the next eight appear, and
+    nothing lets a manager say "show me every shortage".
+    """
+
+    alerts: list[AlertOut]
+    standing: dict[str, int]
+    #: The kinds actually present, so the filter offers only what exists.
+    kinds: list[str]
+
+
+@router.get("", response_model=AlertListOut)
+def list_alerts(
+    severity: str | None = Query(default=None),
+    kind: str | None = Query(default=None),
+    db: Session = Depends(get_session),
+) -> AlertListOut:
+    """All current alerts, filtered, with their standing applied."""
+    visible, standing = alert_service.apply(db, build_alerts(db))
+
+    # The kinds come from the unfiltered set: a filter that hides its own
+    # options as soon as it is applied cannot be undone from the screen.
+    kinds = sorted({str(alert.get("kind") or "OTHER") for alert in visible})
+
+    if severity:
+        wanted = severity.strip().upper()
+        visible = [a for a in visible if str(a.get("severity", "")).upper() == wanted]
+    if kind:
+        chosen = kind.strip().upper()
+        visible = [a for a in visible if str(a.get("kind") or "OTHER").upper() == chosen]
+
+    return AlertListOut(
+        alerts=[AlertOut.model_validate(a) for a in visible],
+        standing=standing,
+        kinds=kinds,
+    )
 
 
 class DecisionRequest(BaseModel):

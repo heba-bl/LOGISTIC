@@ -7,6 +7,7 @@
 
 import { API_BASE_URL, apiClient } from './apiClient'
 import type { Overview, PeriodKey } from '@/types/overview'
+import type { Alert } from '@/types/domain'
 import type {
   ExcelHistoryEntry,
   ExcelHistoryQuery,
@@ -46,7 +47,6 @@ import type {
   SampleSuggestion,
   Setting,
   ShortageRisk,
-  SimulationRun,
   Station,
   StockMovement,
   StockRow,
@@ -327,7 +327,15 @@ export const dashboardApi = {
 //: Supervision decisions on alerts. None of these change a business state:
 //: releasing a lot or covering a request stays in the workbook, signed by the
 //: zone chief. These record who is watching.
+export interface AlertFeed {
+  alerts: Alert[]
+  standing: Record<string, number>
+  kinds: string[]
+}
+
 export const alertsApi = {
+  //: Every alert, unlike the dashboard's shortlist of eight.
+  list: (params?: { severity?: string; kind?: string }) => get<AlertFeed>('/alerts', params),
   acknowledge: (body: AlertDecision) => post<unknown>('/alerts/acknowledge', body),
   snooze: (body: AlertDecision) => post<unknown>('/alerts/snooze', body),
   close: (body: AlertDecision) => post<unknown>('/alerts/close', body),
@@ -392,14 +400,8 @@ export const aiApi = {
   suggestions: () => get<string[]>('/ai/copilot/suggestions'),
 }
 
-export const simulationApi = {
-  run: (payload: {
-    part_id?: number | null
-    supplier_id?: number | null
-    station_id?: number | null
-    quantity?: number
-    production_quantity?: number
-    stop_after?: string | null
-  }) => post<SimulationRun>('/simulation/run', payload),
-  steps: () => get<string[]>('/simulation/steps'),
-}
+//: `simulationApi` was here. It POSTed to /insights/simulation/run,
+//: which creates lots, inspections and quality decisions through the
+//: real services and commits them - production manufactured from the
+//: supervision screen. The endpoint remains for terminal use, the way
+//: the seed script is used; the site no longer has a way to call it.

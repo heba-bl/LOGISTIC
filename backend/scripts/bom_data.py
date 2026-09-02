@@ -718,15 +718,24 @@ CONSUMABLE_SUBSYSTEMS: dict[str, tuple[Subsystem, ...]] = {
 }
 
 
+#: Which suppliers cover which system, on the WhAP 8x8.
+#:
+#: Two per system: a lead and a second source. A single-sourced system is a
+#: system whose rupture has no answer, and on a vehicle with a 200-day lead time
+#: on its missiles that is the difference between a delay and a stopped line.
+#:
+#: TASM Casablanca appears wherever local content is credible - structure,
+#: interior, wiring - because that is what the 35% local integration target
+#: actually means in a parts list.
 SUPPLIER_BY_CATEGORY = {
-    "Freinage": ("DEL", "VAL"),
-    "Chassis": ("VAL", "DEL"),
-    "Motorisation": ("VAL", "SUM"),
-    "Electrique": ("YZK", "SUM"),
-    "Carrosserie": ("DEL", "VAL"),
-    "Interieur": ("YZK", "SUM"),
-    "Confort": ("VAL", "SUM"),
-    "Securite": ("DEL", "SUM"),
+    "Freinage": ("TSL", "TSM"),
+    "Chassis": ("TSL", "TSM"),
+    "Motorisation": ("CUM", "TSL"),
+    "Electrique": ("TSM", "TSL"),
+    "Carrosserie": ("TSM", "TSL"),
+    "Interieur": ("TSM", "TSL"),
+    "Confort": ("TSM", "TSL"),
+    "Securite": ("KON", "ELB"),
 }
 
 

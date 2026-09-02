@@ -105,17 +105,32 @@ CATEGORY_LABELS = {
     whap_source.CATEGORY_PACKAGING: "Emballage",
 }
 
+#: (code, name, country, lead time in days)
+#:
+#: The suppliers named on the Kestrel WhAP 8x8 itself, not generic automotive
+#: tier ones. A wheeled armoured infantry vehicle is not built by the people who
+#: build hatchbacks, and a catalogue that said Valeo and Faurecia described the
+#: wrong plant entirely.
+#:
+#: Lead times are estimates, and deliberately long: defence procurement runs in
+#: months, not the four days a car parts distributor quotes. They are what makes
+#: the shortage risk on this screen mean anything - a rupture on a turret is not
+#: recoverable by calling on Thursday.
 SUPPLIERS = [
-    ("DEL", "Delphi Automotive", "France", 5),
-    ("YZK", "Yazaki Europe", "Portugal", 9),
-    ("SUM", "Sumitomo Electric", "Maroc", 7),
-    ("VAL", "Valeo Systems", "France", 4),
-    ("BOS", "Bosch Mobility", "Allemagne", 6),
-    ("CTL", "Continental Automotive", "Allemagne", 8),
-    ("MAG", "Magna Structures", "Espagne", 7),
-    ("FAU", "Faurecia Interiors", "France", 5),
-    ("HEL", "Hella Lighting", "Allemagne", 10),
-    ("SKF", "SKF Bearings", "Italie", 12),
+    # Armament
+    ("KON", "Kongsberg Defence", "Norvege", 120),          # tourelle MCT-30R
+    ("ELB", "Elbit Systems", "Israel", 110),               # tourelle UT30MK2
+    ("NGA", "Northrop Grumman Armament", "USA", 150),      # canon Bushmaster Mk44
+    ("FNH", "FN Herstal", "Belgique", 90),                 # mitrailleuse M240
+    ("KBP", "KBP Tula", "Russie", 180),                    # Konkurs-M, lanceur 9P56M
+    ("RJV", "Javelin Joint Venture", "USA", 200),          # missile FGM-148
+    # Mobility
+    ("CUM", "Cummins", "USA", 100),                        # moteur ISX 600
+    # Design authority and integration
+    ("DRD", "DRDO", "Inde", 60),                           # co-conception
+    ("TSL", "Tata Advanced Systems", "Inde", 75),          # ensembles constructeur
+    # The 35% local content the Casablanca plant is committed to by 2028.
+    ("TSM", "TASM Casablanca", "Maroc", 21),
 ]
 
 #: Accounts the shared workbook marks INACTIF. Kept in step with
@@ -149,12 +164,20 @@ STATIONS = [
 ]
 
 #: The vehicle the nomenclature describes.
+#: The vehicle the whole catalogue exists for.
+#:
+#: Named properly: "Vehicule blinde 8x8" described a category, not a product,
+#: and every screen that shows it was saying less than it knew.
 VEHICLE = {
     "code": "WHAP-8X8",
-    "name": "Vehicule blinde 8x8",
-    "segment": "Vehicule special",
+    "name": "Kestrel WhAP 8x8",
+    "segment": "Vehicule blinde de combat d'infanterie amphibie",
     "model_year": 2026,
-    "description": "Nomenclature fournie: WhAP_8x8_2200_pieces.xlsx",
+    "description": (
+        "Tata Advanced Systems / DRDO. Assemble a Casablanca (TASM), "
+        "35% d'integration locale en 2028. 25-26 t, moteur Cummins ISX 600, "
+        "equipage 3 + 9. Nomenclature: WhAP_8x8_2200_pieces.xlsx"
+    ),
 }
 
 #: Capacity of one address. Sized from the catalogue so the racks can actually
@@ -550,14 +573,14 @@ def seed_history(db, ctx) -> None:
 
     # --- 1. Fully completed inbound flows -> real stock -------------------
     stored = [
-        ("SMALL_A", "DEL", 420),
-        ("SMALL_B", "DEL", 800),
-        ("LARGE_A", "YZK", 160),
-        ("SMALL_C", "SUM", 900),
-        ("SMALL_D", "SUM", 500),
-        ("LARGE_C", "VAL", 90),
-        ("LARGE_D", "VAL", 60),
-        ("LARGE_B", "YZK", 120),
+        ("SMALL_A", "TSL", 420),
+        ("SMALL_B", "TSL", 800),
+        ("LARGE_A", "TSM", 160),
+        ("SMALL_C", "TSM", 900),
+        ("SMALL_D", "TSM", 500),
+        ("LARGE_C", "CUM", 90),
+        ("LARGE_D", "CUM", 60),
+        ("LARGE_B", "TSM", 120),
     ]
     for scenario_role, supplier, quantity in stored:
         _full_inbound(
@@ -571,7 +594,7 @@ def seed_history(db, ctx) -> None:
     reception_service.create_reception(
         db,
         part_id=parts["SMALL_C"].id,
-        supplier_id=suppliers["SUM"].id,
+        supplier_id=suppliers["TSM"].id,
         quantity_expected=250,
         quantity_received=250,
         delivery_note="BL-SUM-250",
@@ -583,7 +606,7 @@ def seed_history(db, ctx) -> None:
     pending = reception_service.create_reception(
         db,
         part_id=parts["SMALL_A"].id,
-        supplier_id=suppliers["DEL"].id,
+        supplier_id=suppliers["TSL"].id,
         quantity_expected=180,
         quantity_received=180,
         delivery_note="BL-DEL-180",
@@ -598,7 +621,7 @@ def seed_history(db, ctx) -> None:
     waiting = reception_service.create_reception(
         db,
         part_id=parts["LARGE_A"].id,
-        supplier_id=suppliers["YZK"].id,
+        supplier_id=suppliers["TSM"].id,
         quantity_expected=80,
         quantity_received=80,
         delivery_note="BL-YZK-80",
@@ -621,7 +644,7 @@ def seed_history(db, ctx) -> None:
     approved = reception_service.create_reception(
         db,
         part_id=parts["SMALL_D"].id,
-        supplier_id=suppliers["SUM"].id,
+        supplier_id=suppliers["TSM"].id,
         quantity_expected=200,
         quantity_received=200,
         delivery_note="BL-SUM-200",
@@ -649,7 +672,7 @@ def seed_history(db, ctx) -> None:
     non_conform = reception_service.create_reception(
         db,
         part_id=parts["SMALL_A"].id,
-        supplier_id=suppliers["DEL"].id,
+        supplier_id=suppliers["TSL"].id,
         quantity_expected=140,
         quantity_received=140,
         delivery_note="BL-DEL-140",
@@ -673,7 +696,7 @@ def seed_history(db, ctx) -> None:
     reception_service.create_reception(
         db,
         part_id=parts["LARGE_B"].id,
-        supplier_id=suppliers["YZK"].id,
+        supplier_id=suppliers["TSM"].id,
         quantity_expected=100,
         quantity_received=94,
         delivery_note="BL-YZK-94",

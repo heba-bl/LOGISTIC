@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { AppLayout } from '@/layouts/AppLayout'
 import AiAssistant from '@/pages/AiAssistant'
+import Alertes from '@/pages/Alertes'
 import AnalyticsLayout from '@/pages/analytics/AnalyticsLayout'
 import ProductionRisques from '@/pages/analytics/ProductionRisques'
 import QualiteFlux from '@/pages/analytics/QualiteFlux'
@@ -16,6 +17,7 @@ import NotFound from '@/pages/NotFound'
 import Production from '@/pages/Production'
 import Quality from '@/pages/Quality'
 import Rapports from '@/pages/Rapports'
+import Referentiel from '@/pages/Referentiel'
 import Receiving from '@/pages/Receiving'
 import Settings from '@/pages/Settings'
 import Traceability from '@/pages/Traceability'
@@ -29,6 +31,7 @@ export default function App() {
       <Route path="/" element={<Entry />} />
       <Route element={<AppLayout />}>
         <Route path="/mission-control" element={<MissionControl />} />
+        <Route path="/alertes" element={<Alertes />} />
         {/* The operator station is gone: operators work in the shared
             workbook, and this site is not in their hands. The address is
             kept so an old bookmark lands somewhere sensible. */}
@@ -47,6 +50,7 @@ export default function App() {
 
         <Route path="/traceability" element={<Traceability />} />
         <Route path="/rapports" element={<Rapports />} />
+        <Route path="/referentiel" element={<Referentiel />} />
         {/* The four Analytics tabs share one window and one request. */}
         <Route path="/analytics" element={<AnalyticsLayout />}>
           <Route index element={<VueGlobale />} />

@@ -296,7 +296,7 @@ def _stock_and_minimum(seed: int, criticality: str) -> tuple[int, int]:
 
 def _supplier_for(seed: int) -> str:
     suppliers = (
-        "DEL", "YZK", "SUM", "VAL", "BOS", "CTL", "MAG", "FAU", "HEL", "SKF",
+        "KON", "ELB", "NGA", "FNH", "KBP", "RJV", "CUM", "DRD", "TSL", "TSM",
     )
     return suppliers[seed % len(suppliers)]
 

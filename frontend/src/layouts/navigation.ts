@@ -1,5 +1,7 @@
 import {
   BarChart3,
+  BellRing,
+  Library,
   Boxes,
   ClipboardCheck,
   FileSpreadsheet,
@@ -40,6 +42,14 @@ export const NAV_ITEMS: NavEntry[] = [
   },
 
   {
+    //: The backlog, badged with what nobody owns. Mission Control keeps its
+    //: shortlist of eight; this is where a manager works through the rest.
+    path: '/alertes',
+    labelKey: 'alerts.title',
+    icon: BellRing,
+    badge: 'alerts',
+  },
+  {
     path: '/donnees',
     labelKey: 'nav.data',
     icon: FileSpreadsheet,
@@ -58,6 +68,8 @@ export const NAV_ITEMS: NavEntry[] = [
     sectionKey: 'nav.section.analytics',
   },
   { path: '/rapports', labelKey: 'nav.reports', icon: FileText },
+  //: Reference tables, not settings: nothing here is configured.
+  { path: '/referentiel', labelKey: 'ref.title', icon: Library },
   {
     path: '/analytics',
     labelKey: 'nav.analytics',
