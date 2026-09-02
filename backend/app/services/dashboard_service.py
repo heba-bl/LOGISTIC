@@ -571,7 +571,14 @@ def build_dashboard(db: Session) -> dict:
     """One payload for the whole Mission Control screen."""
     settings_service.ensure_defaults(db)
     lots = LotRepository(db)
-    alerts = build_alerts(db)
+    from app.services import alert_service
+
+    # Supervision decisions are applied before anything is counted: an alert
+    # somebody is holding until Thursday must not raise the system status, and
+    # the headline figure is how many are in nobody's hands - not how many
+    # exist. Nothing here changes the situation that raised them.
+    raw = build_alerts(db)
+    alerts, standing = alert_service.apply(db, raw)
     critical = [alert for alert in alerts if alert["severity"] == "CRITICAL"]
 
     return {
@@ -581,5 +588,6 @@ def build_dashboard(db: Session) -> dict:
         "stages": build_stages(db),
         "lots_in_flow": list(lots.in_stage(list(IN_FLOW_STATUSES)))[:12],
         "alerts": top_alerts(alerts),
+        "alert_standing": standing,
         "activity": build_activity(db),
     }

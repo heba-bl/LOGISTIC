@@ -134,7 +134,7 @@ export default function Quality() {
         <div className="panel">
           <LoadingPanel rows={6} />
         </div>
-      ) : history.error ? (
+      ) : history.error && !history.data ? (
         <div className="panel">
           <ErrorPanel message={history.error} onRetry={history.refresh} />
         </div>

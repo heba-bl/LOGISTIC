@@ -104,12 +104,20 @@ export default function MissionControl() {
               same ones the flow already shows under their stage. */}
           <Panel
             title={t('mission.alerts')}
-            subtitle={t('mission.alertsSubtitle', { count: dashboard.data.alerts.length })}
+            // The count that matters is not how many alerts exist but how
+            // many are in nobody's hands: the first only grows, the second is
+            // the one a manager can act on.
+            subtitle={t('alert.standing', dashboard.data.alert_standing ?? {
+              total: dashboard.data.alerts.length,
+              owned: 0,
+              snoozed: 0,
+              unowned: dashboard.data.alerts.length,
+            })}
             delay={0.16}
             bodyClassName=""
             action={<Activity className="h-3.5 w-3.5 text-ink-3" />}
           >
-            <SmartAlerts alerts={dashboard.data.alerts} />
+            <SmartAlerts alerts={dashboard.data.alerts} onChanged={dashboard.refresh} />
           </Panel>
 
           {/* Activity + copilot */}

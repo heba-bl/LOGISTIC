@@ -324,6 +324,22 @@ export const dashboardApi = {
   get: () => get<Dashboard>('/dashboard'),
 }
 
+//: Supervision decisions on alerts. None of these change a business state:
+//: releasing a lot or covering a request stays in the workbook, signed by the
+//: zone chief. These record who is watching.
+export const alertsApi = {
+  acknowledge: (body: AlertDecision) => post<unknown>('/alerts/acknowledge', body),
+  snooze: (body: AlertDecision) => post<unknown>('/alerts/snooze', body),
+  close: (body: AlertDecision) => post<unknown>('/alerts/close', body),
+}
+
+export interface AlertDecision {
+  alert_key: string
+  actor_reference: string
+  reason?: string
+  snooze_hours?: number
+}
+
 export const traceabilityApi = {
   lot: (lotId: number) => get<LotTrace>(`/traceability/lots/${lotId}`),
   byLotNumber: (lotNumber: string) =>

@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Menu } from 'lucide-react'
 
 import { AmbientBackdrop } from '@/components/AmbientBackdrop'
+import { StalenessBanner } from '@/components/StalenessBanner'
 import { useSession } from '@/hooks/useSession'
 import { useI18n } from '@/i18n/I18nProvider'
 import { Sidebar } from './Sidebar'
@@ -56,6 +57,9 @@ export function AppLayout() {
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               className="mx-auto w-full max-w-[1600px] px-6 py-7 pt-16 lg:pt-7"
             >
+              {/* Above the page, not inside it: a screen added later cannot
+                  forget to say that its figures are old. */}
+              <StalenessBanner />
               <Outlet />
             </motion.div>
           </AnimatePresence>

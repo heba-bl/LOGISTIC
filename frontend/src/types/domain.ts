@@ -408,6 +408,11 @@ export interface Alert {
   lot_number: string | null
   part_reference: string | null
   location_code: string | null
+  /** Present once somebody has taken the alert on. */
+  acknowledged_by?: string | null
+  acknowledged_by_name?: string | null
+  acknowledged_at?: string | null
+  acknowledged_reason?: string | null
 }
 
 export interface ActivityEvent {
@@ -429,6 +434,8 @@ export interface Dashboard {
   stages: FlowStage[]
   lots_in_flow: Lot[]
   alerts: Alert[]
+  /** total / owned / snoozed / unowned. */
+  alert_standing: Record<string, number>
   activity: ActivityEvent[]
 }
 

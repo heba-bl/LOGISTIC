@@ -171,6 +171,22 @@ class RecommendationKind(str, Enum):
     OPTIMIZATION = "OPTIMIZATION"
 
 
+class AlertAction(str, Enum):
+    """What a supervisor did about an alert.
+
+    None of these change what the plant did - only who is watching it.
+    """
+
+    #: Seen and owned. The alert stays visible; it now has a name on it.
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+    #: Held until a date, with a reason. Hidden until then, not resolved.
+    SNOOZED = "SNOOZED"
+    #: Dealt with. Leaves the panel and stays in the trace.
+    CLOSED = "CLOSED"
+    #: Undo: hands the alert back to nobody.
+    REOPENED = "REOPENED"
+
+
 class ImportType(str, Enum):
     """Which business flow an uploaded file feeds."""
 

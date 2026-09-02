@@ -103,7 +103,7 @@ export default function AiAssistant() {
         <Panel bodyClassName="">
           <LoadingPanel rows={6} />
         </Panel>
-      ) : analysis.error ? (
+      ) : analysis.error && !analysis.data ? (
         <Panel bodyClassName="">
           <ErrorPanel message={analysis.error} onRetry={analysis.refresh} />
         </Panel>

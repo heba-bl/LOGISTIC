@@ -137,7 +137,7 @@ export default function Receiving() {
         <div className="panel">
           <LoadingPanel rows={6} />
         </div>
-      ) : receptions.error ? (
+      ) : receptions.error && !receptions.data ? (
         <div className="panel">
           <ErrorPanel message={receptions.error} onRetry={receptions.refresh} />
         </div>

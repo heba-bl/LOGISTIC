@@ -142,7 +142,7 @@ export default function FichierOperationnel() {
         <Panel bodyClassName="">
           <LoadingPanel rows={6} />
         </Panel>
-      ) : status.error ? (
+      ) : status.error && !status.data ? (
         <Panel bodyClassName="">
           <ErrorPanel message={status.error} onRetry={status.refresh} />
         </Panel>

@@ -59,7 +59,7 @@ export default function DonneesOperationnelles() {
       <Panel>
         {status.initialLoading ? (
           <LoadingPanel rows={2} />
-        ) : status.error ? (
+        ) : status.error && !status.data ? (
           <ErrorPanel message={status.error} onRetry={status.refresh} />
         ) : status.data ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -147,7 +147,7 @@ export default function DonneesOperationnelles() {
         </p>
         {imports.initialLoading ? (
           <LoadingPanel rows={2} />
-        ) : imports.error ? (
+        ) : imports.error && !imports.data ? (
           <ErrorPanel message={imports.error} onRetry={imports.refresh} />
         ) : pending.length === 0 ? (
           <EmptyState
@@ -303,7 +303,7 @@ export default function DonneesOperationnelles() {
       >
         {table.initialLoading ? (
           <LoadingPanel rows={5} />
-        ) : table.error ? (
+        ) : table.error && !table.data ? (
           <ErrorPanel message={table.error} onRetry={table.refresh} />
         ) : table.data && table.data.rows.length > 0 ? (
           <div className="max-h-[55vh] overflow-auto rounded-md border border-line">

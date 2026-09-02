@@ -147,7 +147,7 @@ export default function Warehouse() {
         <div className="panel">
           <LoadingPanel rows={6} />
         </div>
-      ) : grid.error ? (
+      ) : grid.error && !grid.data ? (
         <div className="panel">
           <ErrorPanel message={grid.error} onRetry={grid.refresh} />
         </div>

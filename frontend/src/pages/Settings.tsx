@@ -81,7 +81,7 @@ export default function Settings() {
       >
         {settings.initialLoading ? (
           <LoadingPanel rows={5} />
-        ) : settings.error ? (
+        ) : settings.error && !settings.data ? (
           <ErrorPanel message={settings.error} onRetry={settings.refresh} />
         ) : (
           <div className="divide-y divide-line">

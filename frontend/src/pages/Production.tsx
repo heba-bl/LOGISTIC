@@ -164,7 +164,7 @@ export default function Production() {
         <div className="panel">
           <LoadingPanel rows={6} />
         </div>
-      ) : requests.error ? (
+      ) : requests.error && !requests.data ? (
         <div className="panel">
           <ErrorPanel message={requests.error} onRetry={requests.refresh} />
         </div>

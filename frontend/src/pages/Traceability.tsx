@@ -99,7 +99,7 @@ export default function Traceability() {
         >
           {lots.initialLoading ? (
             <LoadingPanel rows={4} />
-          ) : lots.error ? (
+          ) : lots.error && !lots.data ? (
             <ErrorPanel message={lots.error} onRetry={lots.refresh} />
           ) : (lots.data?.length ?? 0) === 0 ? (
             <EmptyState title={t('trace.noLot')} description={t('trace.noLotHint')} />
@@ -140,7 +140,7 @@ export default function Traceability() {
         >
           {audit.initialLoading ? (
             <LoadingPanel rows={6} />
-          ) : audit.error ? (
+          ) : audit.error && !audit.data ? (
             <ErrorPanel message={audit.error} onRetry={audit.refresh} />
           ) : (audit.data?.length ?? 0) === 0 ? (
             <EmptyState title={t('trace.noEvent')} description={t('trace.noEventHint')} />

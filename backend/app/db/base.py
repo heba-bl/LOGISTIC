@@ -22,3 +22,5 @@ class Base(DeclarativeBase):
     """Base class for every ORM model."""
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+from app.models import alerts  # noqa: E402,F401

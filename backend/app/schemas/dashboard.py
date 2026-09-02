@@ -50,6 +50,12 @@ class AlertOut(BaseModel):
     lot_number: str | None = None
     part_reference: str | None = None
     location_code: str | None = None
+    #: Present only once somebody has taken the alert on.
+    acknowledged_by: str | None = None
+    acknowledged_by_name: str | None = None
+    acknowledged_at: UtcDatetime | None = None
+    acknowledged_reason: str | None = None
+
 
 
 class ActivityOut(BaseModel):
@@ -73,6 +79,8 @@ class DashboardOut(BaseModel):
     stages: list[FlowStageOut]
     lots_in_flow: list[LotOut]
     alerts: list[AlertOut]
+    #: total / owned / snoozed / unowned - the last is the one to read.
+    alert_standing: dict[str, int] = {}
     activity: list[ActivityOut]
 
 

@@ -158,7 +158,7 @@ export default function Rapports() {
         <Panel bodyClassName="">
           <LoadingPanel rows={5} />
         </Panel>
-      ) : report.error ? (
+      ) : report.error && !report.data ? (
         <Panel bodyClassName="">
           <ErrorPanel message={report.error} onRetry={report.refresh} />
         </Panel>

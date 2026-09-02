@@ -183,7 +183,6 @@ INSPECTION_COLUMNS = (
     ("TAILLE_ECHANTILLON", True, 18),
     ("QUANTITE_CONFORME", True, 18),
     ("QUANTITE_NON_CONFORME", True, 22),
-    ("RESULTAT", False, 16),
     ("COMMENTAIRE", False, 28),
 )
 
@@ -195,7 +194,6 @@ QUALITY_COLUMNS = (
     ("REFERENCE_PIECE", True, 16),
     ("DESIGNATION", False, 30),
     ("QUANTITE", True, 12),
-    ("RESULTAT_INSPECTION", False, 20),
     ("DECISION", True, 16),
     ("QUANTITE_APPROUVEE", False, 18),
     ("COMMENTAIRE", True, 34),
@@ -226,7 +224,6 @@ WAREHOUSE_COLUMNS = (
     ("QUANTITE", True, 12),
     ("EMPLACEMENT", True, 14),
     ("EMPLACEMENT_PRINCIPAL", False, 20),
-    ("TYPE_EMPLACEMENT", False, 18),
     ("COMMENTAIRE", False, 26),
 )
 
@@ -1046,11 +1043,26 @@ def _seed_rows(db, zone: str, limit: int = SEED_ROWS) -> list[dict[str, object]]
         for item in recent(
             select(Lot)
             .where(Lot.status == LotStatus.RED_CAGE)
-            .options(selectinload(Lot.part)),
+            .options(
+                selectinload(Lot.part),
+                selectinload(Lot.inspections).selectinload(Inspection.inspector),
+                selectinload(Lot.reception).selectinload(Reception.received_by),
+            ),
             Lot.received_at,
             spread=lambda row: row.part_id,
         ):
             date, _ = _fmt(item.received_at)
+            # A lot reaches the Red Cage because an inspection found it
+            # non-conform, so its author is the inspector who found it. Leaving
+            # this blank produced forty lines carrying a checker and a
+            # validation date with nobody as maker - a validated record with no
+            # author, which is precisely what the Maker/Checker rule forbids and
+            # what this whole workbook exists to demonstrate.
+            inspections = sorted(
+                (inspection for inspection in item.inspections if inspection.inspector),
+                key=lambda inspection: inspection.inspected_at or inspection.started_at,
+                reverse=True,
+            )
             rows.append({
                 "ID_RED_CAGE": f"RC-{item.id:05d}", "DATE": date,
                 "ID_LOT": item.lot_number,
@@ -1058,6 +1070,19 @@ def _seed_rows(db, zone: str, limit: int = SEED_ROWS) -> list[dict[str, object]]
                 "QUANTITE": item.quantity_received,
                 "MOTIF": item.blocked_reason or "non conformite constatee",
                 "ORIGINE": "INSPECTION",
+                # Not every blocked lot was inspected: a quantity gap caught
+                # at reception sends one straight to the Red Cage. Its author
+                # is then the receptionist who found the gap, and eight of the
+                # twenty-eight lines had no other source.
+                "_maker": (
+                    inspections[0].inspector.employee_number
+                    if inspections
+                    else (
+                        item.reception.received_by.employee_number
+                        if item.reception and item.reception.received_by
+                        else ""
+                    )
+                ),
             })
 
     elif zone in ("WAREHOUSE", "SORTIES"):
