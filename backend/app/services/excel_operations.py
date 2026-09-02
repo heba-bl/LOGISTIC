@@ -85,6 +85,35 @@ SUBTITLE_FONT = Font(size=9, italic=True, color=MUTED)
 HEADER_FONT = Font(size=10, bold=True, color=HEADER_FG)
 HEADER_FONT_OPTIONAL = Font(size=10, color=HEADER_FG)
 HEADER_FILL = PatternFill("solid", start_color=HEADER_BG)
+#: One colour per sheet, so a tab is recognised before it is read.
+#:
+#: Same vocabulary as the rest of the project: the chain runs blue for arrival,
+#: teal for control, green for the verdict, red for what is blocked, amber for
+#: what is stored, orange for what is asked and violet for what leaves. The
+#: reference sheets stay slate - they are not a step, and colouring them would
+#: dilute the signal the operational tabs carry.
+SHEET_ACCENTS: dict[str, str] = {
+    "RECEPTION": "1B5E9E",
+    "INSPECTION": "0E7490",
+    "QUALITE": "15803D",
+    "RED_CAGE": "B42318",
+    "WAREHOUSE": "A16207",
+    "MOUVEMENTS_STOCK": "A16207",
+    "EMPLACEMENTS": "A16207",
+    "PRODUCTION": "C2410C",
+    "SORTIES": "6D28D9",
+    "HISTORIQUE": "334155",
+    "UTILISATEURS": "334155",
+    "ARTICLES": "334155",
+    "BOM_VEHICULE": "0F766E",
+    "ACCUEIL": "1F3864",
+}
+
+#: The tab strip carries the same colour, so the workbook is legible closed.
+def _accent_of(sheet) -> str:
+    return SHEET_ACCENTS.get(str(sheet.title).upper(), HEADER_BG)
+
+
 INPUT_FILL = PatternFill("solid", start_color=FILL_INPUT)
 LOCKED_FILL = PatternFill("solid", start_color=FILL_LOCKED)
 HEADER_FILL_AUTO = PatternFill("solid", start_color=HEADER_BG_AUTO)
@@ -391,7 +420,7 @@ def _articles_lookup(reference_cell: str, rows: int, column: str, fallback: str)
 
 def _title(sheet: Worksheet, title: str, subtitle: str, columns: int) -> None:
     sheet["A1"] = title
-    sheet["A1"].font = TITLE_FONT
+    sheet["A1"].font = Font(size=15, bold=True, color=_accent_of(sheet))
     sheet["A2"] = subtitle
     sheet["A2"].font = SUBTITLE_FONT
     if columns > 1:
@@ -433,11 +462,16 @@ def _headers(
         cell.font = HEADER_FONT if required else HEADER_FONT_OPTIONAL
         # A washed-out header marks a column nobody types in. Reading the tab
         # from left to right, the dark ones are the day's actual work.
-        cell.fill = HEADER_FILL_AUTO if name in automatic else HEADER_FILL
+        cell.fill = (
+            HEADER_FILL_AUTO
+            if name in automatic
+            else PatternFill("solid", start_color=_accent_of(sheet))
+        )
         cell.border = CELL_BORDER
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         sheet.column_dimensions[get_column_letter(index)].width = width
     sheet.row_dimensions[HEADER_ROW].height = 30
+    sheet.sheet_properties.tabColor = _accent_of(sheet)
     sheet.freeze_panes = sheet.cell(row=HEADER_ROW + 1, column=1)
 
 
@@ -739,6 +773,17 @@ def _entry_grid(
     for offset in range(rows):
         excel_row = HEADER_ROW + 1 + offset
         values = seeded[offset] if seeded and offset < len(seeded) else None
+        # A seeded line is not always a record. The rows carrying outstanding
+        # work arrive as BROUILLON with only their identifying columns filled:
+        # they exist to be completed, so locking them the way a validated line
+        # is locked leaves the operator staring at a sheet that refuses to be
+        # typed in - which is exactly what happened.
+        draft = bool(
+            values is not None
+            and status_index
+            and len(values) >= status_index
+            and str(values[status_index - 1] or "").strip().upper() == STATUS_DRAFT
+        )
         for index in range(1, len(columns) + 1):
             cell = sheet.cell(row=excel_row, column=index)
             cell.border = CELL_BORDER
@@ -764,7 +809,7 @@ def _entry_grid(
             elif index in system_owned:
                 cell.protection = Protection(locked=True)
                 cell.fill = LOCKED_FILL
-            elif values is not None:
+            elif values is not None and not draft:
                 # A seeded line is an operation SLCC already holds. It is shown
                 # so the sheet opens on something legible, never to be edited.
                 cell.protection = Protection(locked=True)
@@ -1172,18 +1217,118 @@ def _pending_rows(db, zone: str, limit: int = PENDING_ROWS) -> list[dict[str, ob
     return rows
 
 
+#: Which responsibles cover which sheet. Mirrors ZoneOfSheet in the macro and
+#: SHEET_ZONES on the server: INSPECTION is signed by quality because an
+#: inspector does not sign off their own trade, and SORTIES by the magasin
+#: because the magasin is what serves the request.
+SHEET_CHECKERS: dict[str, tuple[str, ...]] = {
+    "RECEPTION": ("RM-004",),
+    "INSPECTION": ("QM-002", "QM-003"),
+    "QUALITE": ("QM-002", "QM-003"),
+    "RED_CAGE": ("QM-002", "QM-003"),
+    "WAREHOUSE": ("WH-M01",),
+    "SORTIES": ("WH-M01",),
+    "PRODUCTION": ("PM-001", "PM-002"),
+}
+
+#: Why a line came back, per zone. Worded the way a responsible writes at 16:00,
+#: not the way an error message is generated.
+REJECTION_REASONS: dict[str, tuple[str, ...]] = {
+    "RECEPTION": (
+        "Ecart de quantite non justifie, bon de livraison a joindre",
+        "Fournisseur errone sur la ligne",
+    ),
+    "INSPECTION": (
+        "Taille d echantillon insuffisante pour la quantite du lot",
+        "Defauts non detailles, reprendre le controle",
+    ),
+    "QUALITE": ("Decision a revoir avec le fournisseur avant acceptation",),
+    "RED_CAGE": ("Motif de blocage trop vague",),
+    "WAREHOUSE": ("Emplacement incompatible avec la classe de taille",),
+    "PRODUCTION": ("Priorite a confirmer avec le chef de ligne",),
+    "SORTIES": ("Quantite preparee differente de la quantite sortie",),
+}
+
+#: One line in nine comes back. Enough that the rejection path is visible in
+#: every sheet, rare enough that the file still reads as a plant that works.
+REJECTION_EVERY = 9
+
+
+def _signature(sync_id: str) -> str:
+    """The token SLCC returns, reproduced from the sync id.
+
+    Derived rather than random so regenerating the workbook twice gives the same
+    file: a diff that changes on every build hides the changes that matter.
+    """
+    return hashlib.sha256(f"{sync_id}:{CODE_SALT}".encode("utf-8")).hexdigest()[:32]
+
+
+def _stamp_pair(record: dict) -> tuple[str, str]:
+    """When the line was submitted, and when it was signed.
+
+    Built from the date the operation actually carries, so a validation is never
+    stamped before the work it validates. Falls back to the sheet's own date
+    when a zone does not record an hour.
+    """
+    day = str(record.get("DATE") or "")
+    hour = str(record.get("HEURE") or "")
+    if not day:
+        return "", ""
+    submitted = f"{day} {hour}".strip()
+    # A responsible signs at the end of the shift, not at the same minute.
+    try:
+        hours, minutes = (int(part) for part in hour.split(":")[:2])
+        total = min(hours * 60 + minutes + 35, 23 * 60 + 55)
+        checked = f"{day} {total // 60:02d}:{total % 60:02d}"
+    except (ValueError, IndexError):
+        checked = f"{day} 16:15"
+    return submitted, checked
+
+
 def _seeded_grid(
     db, zone: str, columns: tuple[tuple[str, bool, int], ...]
 ) -> list[list]:
     """Lay the zone's history out in column order, workflow columns included."""
     names = [name for name, _, _ in columns]
+    checkers = SHEET_CHECKERS.get(zone, ("LM-001",))
+    reasons = REJECTION_REASONS.get(zone, ("Ligne a corriger",))
     grid: list[list] = []
+
     for record in _seed_rows(db, zone):
         maker = str(record.pop("_maker", "") or "")
+        position = len(grid)
+        sync_id = f"{zone}-HISTORIQUE-{position + 1:03d}"
+
+        # Never the operator who entered the line: that is the one rule this
+        # file exists to demonstrate, and a seeded row that breaks it teaches
+        # the opposite of what the workbook is for.
+        candidates = [ref for ref in checkers if ref.upper() != maker.upper()]
+        checker = (candidates or list(checkers))[position % max(len(candidates or checkers), 1)]
+
+        submitted, checked = _stamp_pair(record)
+        rejected = position % REJECTION_EVERY == REJECTION_EVERY - 1
+
         record["MATRICULE_OPERATEUR"] = maker
-        record["STATUT"] = STATUS_APPROVED
-        record["ETAT_SYNC"] = SYNC_DONE
-        record["ID_SYNC"] = f"{zone}-HISTORIQUE-{len(grid) + 1:03d}"
+        record["MATRICULE_CHECKER"] = checker
+        record["DATE_SOUMISSION"] = submitted
+        record["ID_SYNC"] = sync_id
+
+        if rejected:
+            # A rejected line was never sent and carries no signature: the
+            # token is proof of an approval, so inventing one here would make
+            # the proof worthless.
+            record["STATUT"] = STATUS_REJECTED
+            record["MOTIF_REJET"] = reasons[position % len(reasons)]
+            record["DATE_VALIDATION"] = checked
+            record["ETAT_SYNC"] = ""
+            record["JETON_VALIDATION"] = ""
+        else:
+            record["STATUT"] = STATUS_APPROVED
+            record["MOTIF_REJET"] = ""
+            record["DATE_VALIDATION"] = checked
+            record["ETAT_SYNC"] = SYNC_DONE
+            record["JETON_VALIDATION"] = _signature(sync_id)
+
         grid.append([record.get(name, "") for name in names])
 
     # Outstanding work, below the history and left for the operator. BROUILLON
@@ -1292,11 +1437,12 @@ def _reference_sheet(
     for index, (name, width) in enumerate(headers, start=1):
         cell = sheet.cell(row=HEADER_ROW, column=index, value=name)
         cell.font = HEADER_FONT
-        cell.fill = HEADER_FILL
+        cell.fill = PatternFill("solid", start_color=_accent_of(sheet))
         cell.border = CELL_BORDER
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         sheet.column_dimensions[get_column_letter(index)].width = width
     sheet.row_dimensions[HEADER_ROW].height = 28
+    sheet.sheet_properties.tabColor = _accent_of(sheet)
     sheet.freeze_panes = sheet.cell(row=HEADER_ROW + 1, column=1)
 
     band = PatternFill("solid", start_color=BAND_BG)
@@ -1320,6 +1466,7 @@ def _reference_sheet(
 # ------------------------------------------------------------------- sheets
 def _home_sheet(sheet: Worksheet, summary: dict, generated_at: datetime) -> None:
     """What to do, in the order an operator does it."""
+    sheet.sheet_properties.tabColor = _accent_of(sheet)
     lines: list[tuple[str, str]] = [
         ("SLCC - FICHIER LOGISTIQUE OPERATIONNEL", "title"),
         (SYNTHETIC_NOTICE, "muted"),
@@ -1365,17 +1512,15 @@ def _home_sheet(sheet: Worksheet, summary: dict, generated_at: datetime) -> None
             "mono",
         ),
         (f"Systemes ................ {summary['systems']:>6}", "mono"),
-        ("", ""),
-        (f"Genere le {generated_at.astimezone().strftime('%d/%m/%Y a %H:%M')}", "muted"),
     ]
 
     sheet.column_dimensions["A"].width = 78
     for index, (text, kind) in enumerate(lines, start=1):
         cell = sheet.cell(row=index, column=1, value=text)
         if kind == "title":
-            cell.font = TITLE_FONT
+            cell.font = Font(size=15, bold=True, color=_accent_of(sheet))
         elif kind == "section":
-            cell.font = Font(size=11, bold=True, color=HEADER_BG)
+            cell.font = Font(size=11, bold=True, color=_accent_of(sheet))
         elif kind == "muted":
             cell.font = SUBTITLE_FONT
         elif kind == "mono":
@@ -1481,8 +1626,24 @@ def live_stock(db) -> dict[str, dict]:
         ).all()
     }
 
+    # The declared alternates, which is what the column is asking for. Reading
+    # only the addresses currently holding stock left it empty on all 2 239
+    # rows: no lot is ever split across two places in this data, so "where else
+    # the stock is" is always nothing - while "where else it may go" is 708
+    # real answers a magasinier needs before putting a pallet down.
+    alternates: dict[str, list[str]] = {}
+    for reference, code in db.execute(
+        select(Part.reference, WarehouseLocation.code)
+        .select_from(PartLocation)
+        .join(Part, Part.id == PartLocation.part_id)
+        .join(WarehouseLocation, WarehouseLocation.id == PartLocation.location_id)
+        .where(PartLocation.role == LocationRole.SECONDARY)
+        .order_by(Part.reference, WarehouseLocation.code)
+    ).all():
+        alternates.setdefault(reference, []).append(code)
+
     catalogue: dict[str, dict] = {}
-    for reference in set(balances) | set(placement) | set(primaries):
+    for reference in set(balances) | set(placement) | set(primaries) | set(alternates):
         addresses = placement.get(reference, [])
         primary = primaries.get(reference)
         catalogue[reference] = {
@@ -1495,6 +1656,8 @@ def live_stock(db) -> dict[str, dict]:
             "secondary": [
                 (code, quantity) for code, quantity in addresses if code != primary
             ],
+            #: Addresses this reference may also occupy, stocked or not.
+            "alternates": [code for code in alternates.get(reference, []) if code != primary],
         }
     return catalogue
 
@@ -1559,8 +1722,14 @@ def _articles_sheet(
                 if primary_quantity is not None
                 else primary_code
             )
+            # A quantity where there is one, the bare address where there is
+            # not: an empty alternate is still where this reference belongs.
+            held = dict(live["secondary"])
+            listed = list(held) + [
+                code for code in live["alternates"] if code not in held
+            ]
             secondary = " · ".join(
-                f"{code} : {quantity}" for code, quantity in live["secondary"]
+                f"{code} : {held[code]}" if code in held else code for code in listed
             )
 
         rows.append([
@@ -1604,8 +1773,9 @@ def _bom_sheet(
     """
     bom = [article for article in catalogue if article.in_bom]
 
+    sheet.sheet_properties.tabColor = _accent_of(sheet)
     sheet["A1"] = "BOM_VEHICULE"
-    sheet["A1"].font = TITLE_FONT
+    sheet["A1"].font = Font(size=15, bold=True, color=_accent_of(sheet))
     sheet["A2"] = (
         "Nomenclature du 8x8. Changez le nombre de vehicules en D3: quantite "
         "requise, ecart et statut se recalculent. STOCK_ACTUEL est synchronise "
@@ -1632,7 +1802,7 @@ def _bom_sheet(
     for index, (name, width) in enumerate(headers, start=1):
         cell = sheet.cell(row=HEADER_ROW, column=index, value=name)
         cell.font = HEADER_FONT
-        cell.fill = HEADER_FILL
+        cell.fill = PatternFill("solid", start_color=_accent_of(sheet))
         cell.border = CELL_BORDER
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         sheet.column_dimensions[get_column_letter(index)].width = width

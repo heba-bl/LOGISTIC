@@ -448,9 +448,20 @@ export function AnalyticsTreemap({
         break
       }
     }
+    // Both halves must be non-empty, or the recursion never shrinks: a cut at
+    // items.length leaves an empty tail and a head identical to the input, and
+    // the function calls itself on the same array until the stack gives out.
+    // Values that are zero, equal or negative all reach that state, and the
+    // page dies with "Maximum call stack size exceeded" rather than drawing.
+    cut = Math.min(Math.max(cut, 1), items.length - 1)
+
     const head = items.slice(0, cut)
     const tail = items.slice(cut)
-    const share = head.reduce((accumulator, item) => accumulator + item.value, 0) / sum
+    const headSum = head.reduce((accumulator, item) => accumulator + item.value, 0)
+    // An all-zero group still has to be drawn: fall back to splitting by count
+    // so the tiles stay visible instead of collapsing to zero width.
+    const share =
+      sum > 0 ? Math.min(Math.max(headSum / sum, 0), 1) : head.length / items.length
 
     if (horizontal) {
       const splitWidth = rect.width * share

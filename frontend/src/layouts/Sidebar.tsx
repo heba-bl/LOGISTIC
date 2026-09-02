@@ -2,24 +2,16 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
-  AlertTriangle,
   ChevronsLeft,
   LogOut,
-  Monitor,
-  Moon,
   PanelLeft,
-  Sun,
-  Wifi,
   X,
 } from 'lucide-react'
 
 import { BrandMark } from '@/components/BrandMark'
-import { StatusDot } from '@/components/ui'
 import { useActor, useApiHealth, useApiResource } from '@/hooks'
 import { useSession } from '@/hooks/useSession'
-import { useTheme, type ThemeChoice } from '@/hooks/useTheme'
 import { useI18n } from '@/i18n/I18nProvider'
-import type { Locale } from '@/i18n/messages'
 import { dashboardApi } from '@/services/slcc.service'
 import { cn } from '@/utils/cn'
 import { NAV_ITEMS, type NavEntry } from './navigation'
@@ -83,18 +75,13 @@ function Brand({ collapsed, onClose }: { collapsed: boolean; onClose?: () => voi
           S
         </div>
       ) : (
-        <>
-          <BrandMark
-            inline
-            className="h-11 w-auto max-w-[10.5rem] shrink-0 object-contain object-left"
-          />
-          <div className="min-w-0 border-l border-line pl-3 leading-tight">
-            <p className="truncate text-2xs font-bold uppercase tracking-widest2 text-accent">
-              SLCC
-            </p>
-            <p className="truncate text-[11px] text-ink-3">{t('app.tagline')}</p>
-          </div>
-        </>
+        // The mark alone. The divider and the "SLCC / Centre de controle"
+        // block restated on every screen what the mark already says, and cost
+        // three lines at the top of the rail to do it.
+        <BrandMark
+          inline
+          className="h-10 w-auto max-w-[11rem] shrink-0 object-contain object-left"
+        />
       )}
       {onClose && (
         <button
@@ -267,25 +254,29 @@ function Navigation({
   )
 }
 
-const THEMES: {
-  value: ThemeChoice
-  icon: typeof Sun
-  labelKey: 'settings.themeLight' | 'settings.themeDark' | 'settings.themeSystem'
-}[] = [
-  { value: 'light', icon: Sun, labelKey: 'settings.themeLight' },
-  { value: 'dark', icon: Moon, labelKey: 'settings.themeDark' },
-  { value: 'system', icon: Monitor, labelKey: 'settings.themeSystem' },
-]
-
 /**
  * The foot of the rail: everything the removed top bar used to hold.
  *
  * Connection first, because every figure on every screen is only as true as
  * that line. Then language and theme, then who is signed in and the way out.
  */
-function Footer({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
-  const { t, locale, setLocale } = useI18n()
-  const { choice, setChoice } = useTheme()
+/**
+ * The foot of the rail: who is signed in, and the way out.
+ *
+ * It used to carry the connection state, the language, the theme, the account
+ * and a version string - a quarter of the rail spent on controls touched twice
+ * a day, on every screen. Language and theme live in Parametres, which is where
+ * somebody looks for them; the connection state survives as a dot on the
+ * account row, because a stale screen still has to be able to say so.
+ */
+function Footer({
+  collapsed,
+  onNavigate,
+}: {
+  collapsed: boolean
+  onNavigate?: () => void
+}) {
+  const { t } = useI18n()
   const { status } = useApiHealth()
   const { actor } = useActor()
   const { user, signOut } = useSession()
@@ -298,120 +289,58 @@ function Footer({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: ()
         ? t('topbar.offline')
         : t('topbar.connecting')
 
+  if (!who) return null
+
   if (collapsed) {
     return (
-      <div className="space-y-2 border-t border-line px-2 py-3">
-        <div className="group relative grid h-9 place-items-center rounded-xl bg-elevated">
-          {status === 'offline' ? (
-            <AlertTriangle className="h-4 w-4 text-crit" />
-          ) : (
-            <Wifi className={cn('h-4 w-4', status === 'online' ? 'text-ok' : 'text-warn')} />
-          )}
-          <Tip>{apiLabel}</Tip>
-        </div>
-        {who && (
-          <button
-            type="button"
-            onClick={signOut}
-            className="group relative grid h-9 w-full cursor-pointer place-items-center rounded-xl text-ink-3 transition-colors duration-[var(--t-fast)] hover:bg-crit/10 hover:text-crit"
-            aria-label={t('auth.signOut')}
-          >
-            <LogOut className="h-4 w-4" />
-            <Tip>{t('auth.signOut')}</Tip>
-          </button>
-        )}
+      <div className="border-t border-line px-2 py-2">
+        <button
+          type="button"
+          onClick={signOut}
+          className="group relative grid h-9 w-full place-items-center rounded-xl text-ink-3 transition-colors hover:bg-crit/10 hover:text-crit"
+          aria-label={t('auth.signOut')}
+        >
+          <LogOut className="h-4 w-4" />
+          <Tip>{t('auth.signOut')}</Tip>
+        </button>
       </div>
     )
   }
 
   return (
-    <div className="space-y-2 border-t border-line px-3 py-3">
-      <div className="flex items-center gap-2 rounded-xl bg-elevated px-2.5 py-2 text-2xs font-medium text-ink-2">
-        {status === 'offline' ? (
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-crit" />
-        ) : (
-          <Wifi
-            className={cn('h-3.5 w-3.5 shrink-0', status === 'online' ? 'text-ok' : 'text-warn')}
-          />
-        )}
-        <span className="truncate">{apiLabel}</span>
+    <div className="flex items-center gap-2 border-t border-line px-3 py-2.5">
+      <div className="relative shrink-0">
+        <div className="grid h-8 w-8 place-items-center rounded-full bg-accent text-2xs font-bold text-white">
+          {(who.first_name?.[0] ?? who.full_name[0]) + (who.last_name?.[0] ?? '')}
+        </div>
+        {/* The connection, reduced to a dot on the avatar: it only has to be
+            noticed when it is not green. */}
+        <span
+          title={apiLabel}
+          className={cn(
+            'absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-panel',
+            status === 'online' ? 'bg-ok' : status === 'offline' ? 'bg-crit' : 'bg-warn',
+          )}
+        />
       </div>
 
-      <div className="flex items-center gap-2">
-        <div
-          className="flex items-center rounded-xl border border-line bg-panel p-0.5"
-          role="group"
-          aria-label={t('topbar.language')}
-        >
-          {(['fr', 'en'] as Locale[]).map((code) => (
-            <button
-              key={code}
-              type="button"
-              onClick={() => setLocale(code)}
-              className={cn(
-                'grid h-8 min-w-[2.25rem] cursor-pointer place-items-center rounded-lg text-2xs font-bold uppercase transition-colors duration-[var(--t-fast)]',
-                locale === code
-                  ? 'bg-accent text-white shadow-[0_2px_10px_-3px_rgb(var(--c-accent)/0.9)]'
-                  : 'text-ink-3 hover:text-ink',
-              )}
-            >
-              {code}
-            </button>
-          ))}
-        </div>
-
-        <div
-          className="ml-auto flex items-center rounded-xl border border-line bg-panel p-0.5"
-          role="group"
-          aria-label={t('topbar.theme')}
-        >
-          {THEMES.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setChoice(option.value)}
-              title={t(option.labelKey)}
-              aria-label={t(option.labelKey)}
-              aria-pressed={choice === option.value}
-              className={cn(
-                'grid h-8 w-8 cursor-pointer place-items-center rounded-lg transition-colors duration-[var(--t-fast)]',
-                choice === option.value
-                  ? 'bg-accent text-white shadow-[0_2px_10px_-3px_rgb(var(--c-accent)/0.9)]'
-                  : 'text-ink-3 hover:text-ink',
-              )}
-            >
-              <option.icon className="h-3.5 w-3.5" />
-            </button>
-          ))}
-        </div>
+      <div className="min-w-0 leading-tight">
+        <p className="truncate text-2xs font-semibold text-ink">{who.full_name}</p>
+        <p className="numeric truncate text-[11px] text-ink-3">{who.employee_number}</p>
       </div>
 
-      {who && (
-        <div className="flex items-center gap-2 rounded-xl bg-accent/[0.07] p-2 ring-1 ring-inset ring-accent/15">
-          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-accent text-2xs font-bold text-white">
-            {(who.first_name?.[0] ?? who.full_name[0]) + (who.last_name?.[0] ?? '')}
-          </div>
-          <div className="min-w-0 leading-tight">
-            <p className="truncate text-2xs font-semibold text-ink">{who.full_name}</p>
-            <p className="numeric flex items-center gap-1 text-[11px] text-ink-3">
-              <StatusDot severity="ok" />
-              {who.employee_number}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              onNavigate?.()
-              signOut()
-            }}
-            title={t('auth.signOut')}
-            aria-label={t('auth.signOut')}
-            className="ml-auto grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full text-ink-3 transition-colors duration-[var(--t-fast)] hover:bg-crit/15 hover:text-crit"
-          >
-            <LogOut className="h-4 w-4" aria-hidden="true" />
-          </button>
-        </div>
-      )}
+      <button
+        type="button"
+        onClick={() => {
+          onNavigate?.()
+          signOut()
+        }}
+        title={t('auth.signOut')}
+        aria-label={t('auth.signOut')}
+        className="ml-auto grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full text-ink-3 transition-colors duration-[var(--t-fast)] hover:bg-crit/15 hover:text-crit"
+      >
+        <LogOut className="h-4 w-4" aria-hidden="true" />
+      </button>
     </div>
   )
 }

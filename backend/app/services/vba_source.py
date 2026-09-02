@@ -611,8 +611,8 @@ Private Sub DecideRow(ByVal approve As Boolean)
         Exit Sub
     End If
 
-    zone = UCase$(UserField(checker, "ZONE"))
-    If zone <> UCase$(ZoneOfSheet(ws.Name)) And zone <> "LOGISTIQUE" Then
+    zone = NormalizeZone(UserField(checker, "ZONE"))
+    If zone <> NormalizeZone(ZoneOfSheet(ws.Name)) And zone <> "LOGISTIQUE" Then
         MsgBox "VALIDATION REFUSEE" & vbCrLf & _
                "Ce responsable depend de la zone " & zone & "," & vbCrLf & _
                "pas de " & ZoneOfSheet(ws.Name) & ".", vbCritical, "SLCC"
@@ -794,6 +794,29 @@ Private Function SelectionSummary(ByVal ws As Worksheet, ByRef rows() As Long, _
 End Function
 
 '' Which zone owns a sheet. Drives the "right manager for the right sheet" rule.
+'' Reduce a zone to one spelling, whichever side it came from.
+''
+'' The database names its zones in English - Zone.QUALITY, Zone.LOGISTICS -
+'' and those words are written straight into the UTILISATEURS sheet. The sheet
+'' names and this module are in French. Comparing the two raw strings meant
+'' QUALITY <> QUALITE and LOGISTICS <> LOGISTIQUE, so five of the nine
+'' responsibles could not validate anything at all - silently, with a message
+'' telling them they belonged to another zone.
+''
+'' Normalising both sides is what stops that returning: a rename on either
+'' side now has to pass through here, and here is one place.
+Public Function NormalizeZone(ByVal zone As String) As String
+    Select Case UCase$(Trim$(zone))
+        Case "QUALITY", "QUALITE": NormalizeZone = "QUALITE"
+        Case "LOGISTICS", "LOGISTIQUE": NormalizeZone = "LOGISTIQUE"
+        Case "RECEIVING", "RECEPTION": NormalizeZone = "RECEPTION"
+        Case "WAREHOUSE", "ENTREPOT": NormalizeZone = "WAREHOUSE"
+        Case "PRODUCTION": NormalizeZone = "PRODUCTION"
+        Case "INSPECTION": NormalizeZone = "QUALITE"
+        Case Else: NormalizeZone = UCase$(Trim$(zone))
+    End Select
+End Function
+
 Public Function ZoneOfSheet(ByVal sheetName As String) As String
     Select Case UCase$(sheetName)
         Case "RECEPTION": ZoneOfSheet = "RECEPTION"
@@ -801,8 +824,13 @@ Public Function ZoneOfSheet(ByVal sheetName As String) As String
         '' sheet is validated by quality - as it is on a shop floor.
         Case "INSPECTION": ZoneOfSheet = "QUALITE"
         Case "QUALITE", "RED_CAGE": ZoneOfSheet = "QUALITE"
-        Case "WAREHOUSE", "MOUVEMENTS_STOCK", "EMPLACEMENTS": ZoneOfSheet = "WAREHOUSE"
-        Case "PRODUCTION", "SORTIES": ZoneOfSheet = "PRODUCTION"
+        '' SORTIES belongs to the warehouse, not to production: the magasin is
+        '' what serves the request, so the magasin chief signs it. The server
+        '' has always said so - having it here as PRODUCTION meant a production
+        '' manager passed this check and was then refused by the API, which is
+        '' the worst place to disagree.
+        Case "WAREHOUSE", "SORTIES", "MOUVEMENTS_STOCK", "EMPLACEMENTS": ZoneOfSheet = "WAREHOUSE"
+        Case "PRODUCTION": ZoneOfSheet = "PRODUCTION"
         Case Else: ZoneOfSheet = "LOGISTIQUE"
     End Select
 End Function

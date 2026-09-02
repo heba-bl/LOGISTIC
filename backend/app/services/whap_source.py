@@ -192,7 +192,7 @@ class Article:
     size_class: str
     daily_consumption: float
     #: A second address, so a reference is never tied to a single one.
-    secondary_location: str | None
+    secondary_location: str
     #: "WHAP" when it comes from the customer file, "DEMO" when added here.
     source: str
     #: Only bill-of-materials articles belong to a vehicle.
@@ -243,21 +243,39 @@ def _location_for(seed: int) -> str:
     return f"{zone}-{aisle:02d}-{level:02d}"
 
 
-def _secondary_location(seed: int) -> str | None:
-    """An overflow address for roughly one reference in three.
+def _secondary_location(seed: int) -> str:
+    """The overflow address, and every reference has one.
 
-    A reference pinned to a single address cannot take a delivery once that
-    address is full, which is exactly the situation the warehouse has to cope
-    with. Giving a third of the catalogue a second address keeps split storage
-    part of the normal case rather than an edge case.
+    Two situations force stock away from its usual slot, and both can happen to
+    any reference: the delivery does not fit in what is left, or the piece is
+    too large for that slot in the first place. A reference pinned to a single
+    address cannot take either - so the magasinier improvises, and the file that
+    was supposed to say where things are stops being true.
+
+    It used to be one reference in three, which made split storage look like an
+    exception. It is not: it is Tuesday afternoon when a truck arrives early.
+
+    The alternate is always in a different zone. A second slot in the same aisle
+    is no help when it is the aisle that is full, and it is aisle saturation the
+    warehouse screen actually reports.
     """
-    if seed % 3 != 0:
-        return None
-    zone = ZONES[(seed // 11) % len(ZONES)]
-    aisle = AISLES[(seed // 17) % len(AISLES)]
-    level = LEVELS[(seed // 23) % len(LEVELS)]
-    candidate = f"{zone}-{aisle:02d}-{level:02d}"
-    return None if candidate == _location_for(seed) else candidate
+    primary = _location_for(seed)
+    primary_zone = primary.split("-")[0]
+
+    # Walk the zones from an offset that varies with the reference, so the
+    # overflow load spreads instead of every part falling back on zone B.
+    start = (seed // 11) % len(ZONES)
+    for step in range(len(ZONES)):
+        zone = ZONES[(start + step) % len(ZONES)]
+        if zone == primary_zone:
+            continue
+        aisle = AISLES[(seed // 17) % len(AISLES)]
+        level = LEVELS[(seed // 23) % len(LEVELS)]
+        return f"{zone}-{aisle:02d}-{level:02d}"
+
+    # Unreachable while more than one zone exists; kept so a single-zone
+    # warehouse degrades to "no alternate" instead of raising.
+    return primary
 
 
 def _stock_and_minimum(seed: int, criticality: str) -> tuple[int, int]:
