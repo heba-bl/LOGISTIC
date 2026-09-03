@@ -348,6 +348,44 @@ export interface AlertDecision {
   snooze_hours?: number
 }
 
+export interface TeamMember extends User {
+  can_validate: boolean
+  has_code: boolean
+}
+
+export interface MemberWithCode {
+  member: TeamMember
+  /** Returned once, on creation or reissue. Never stored, never returned again. */
+  code: string | null
+}
+
+//: Who signs in the workbook. Administration, not production: granting the
+//: right to validate changes nothing the plant did.
+export const teamApi = {
+  list: () => get<TeamMember[]>('/team'),
+  create: (body: {
+    employee_number: string
+    first_name: string
+    last_name: string
+    role_name: string
+    zone?: string
+    service?: string
+  }) => post<MemberWithCode>('/team', body),
+  deactivate: (matricule: string) =>
+    post<TeamMember>(`/team/${encodeURIComponent(matricule)}/deactivate`),
+  activate: (matricule: string) =>
+    post<TeamMember>(`/team/${encodeURIComponent(matricule)}/activate`),
+  reissueCode: (matricule: string) =>
+    post<MemberWithCode>(`/team/${encodeURIComponent(matricule)}/reissue-code`),
+  //: Rewrites the shared workbook from the current roster. Not automatic: it
+  //: fails while an operator has the file open, and silently rewriting a file
+  //: somebody is typing in would be worse than asking.
+  regenerateWorkbook: () =>
+    post<{ path: string; size_bytes: number; sheet_count: number }>(
+      '/team/workbook/regenerate',
+    ),
+}
+
 export const traceabilityApi = {
   lot: (lotId: number) => get<LotTrace>(`/traceability/lots/${lotId}`),
   byLotNumber: (lotNumber: string) =>

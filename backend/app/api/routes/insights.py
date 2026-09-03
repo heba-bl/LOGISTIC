@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_session
@@ -32,6 +32,7 @@ from app.services import (
     copilot_service,
     dashboard_service,
     overview_service,
+    powerbi_project,
     simulation_service,
     traceability_service,
 )
@@ -150,6 +151,29 @@ def powerbi_theme() -> Response:
         content=json.dumps(analytics_service.powerbi_theme(), indent=2),
         media_type="application/json",
         headers={"Content-Disposition": 'attachment; filename="SLCC.json"'},
+    )
+
+
+@router.get(
+    "/analytics/powerbi/report.zip",
+    summary="Le rapport Power BI SLCC, pret a ouvrir",
+)
+def powerbi_report(request: Request, db: Session = Depends(get_session)) -> Response:
+    """The report as a Power BI project, built on demand.
+
+    SLCC distributes the report, it does not host it - the same arrangement as
+    the shared workbook. What comes down is a folder of queries, not a folder of
+    data, so it reads whatever the API holds at the moment somebody refreshes.
+
+    The endpoint written into the queries is derived from this request rather
+    than hardcoded: a report that always says `127.0.0.1:8001` is wrong the
+    first time the API moves.
+    """
+    endpoint = str(request.url_for("powerbi"))
+    return Response(
+        content=powerbi_project.build_project(db, endpoint=endpoint),
+        media_type="application/zip",
+        headers={"Content-Disposition": 'attachment; filename="SLCC-PowerBI.zip"'},
     )
 
 

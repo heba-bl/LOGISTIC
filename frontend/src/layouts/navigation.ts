@@ -11,6 +11,7 @@ import {
   PackageSearch,
   Route,
   Settings,
+  Users,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
@@ -84,9 +85,15 @@ export const NAV_ITEMS: NavEntry[] = [
   { path: '/ai-assistant', labelKey: 'nav.ai', icon: Sparkles },
 
   {
+    //: Who signs in the workbook. Administration, so it belongs in Systeme.
+    path: '/equipe',
+    labelKey: 'team.title',
+    icon: Users,
+    sectionKey: 'nav.section.system',
+  },
+  {
     path: '/settings',
     labelKey: 'nav.settings',
     icon: Settings,
-    sectionKey: 'nav.section.system',
   },
 ]

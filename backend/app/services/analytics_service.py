@@ -607,31 +607,39 @@ def powerbi_datasets(db: Session) -> dict:
 #: A report that reads the same figures but wears different colours is a second
 #: product, not the same one. Exporting the theme is what keeps the two in step:
 #: the hexes below are the light-mode tokens of `index.css`, in the same order,
-#: so slot 1 is Deep Petrol in both places.
+#: so slot 1 is the same blue in both places.
+#:
+#: They drifted once: the site palette was reworked twice and this file was not,
+#: so a report built from the export wore the old muted colours while the screen
+#: beside it wore the new ones. When these change again, change them here in the
+#: same commit - a theme that lags is worse than no theme, because it looks
+#: deliberate.
 POWERBI_THEME = {
     "name": "SLCC",
     "dataColors": [
-        "#173F4F",  # Deep Petrol - primary information
-        "#5F9EA0",  # Muted Teal - healthy / second series
-        "#C9A96A",  # Deep Sand - attention / third series
-        "#A0524A",  # Clay - urgent / fourth series
-        "#496A78",  # Slate Blue - comparison
-        "#8FC7C5",  # Soft Aqua - secondary information
+        "#1D6FD0",  # Blue - information and flow, series 1
+        "#17B26A",  # Green - sound, series 2
+        "#E8930C",  # Amber - watch this, series 3
+        "#7C3AED",  # Violet - series 4
+        "#16549E",  # Deep blue - comparison
+        "#7DB0F0",  # Pale blue - secondary information
     ],
-    "background": "#F4F1EA",
-    "foreground": "#172A35",
-    "tableAccent": "#173F4F",
-    "good": "#3E7A7C",
-    "neutral": "#8A6A2F",
-    "bad": "#9B4A3E",
-    "maximum": "#173F4F",
-    "center": "#C9A96A",
-    "minimum": "#8FC7C5",
+    "background": "#F6F8FB",
+    "foreground": "#0F172A",
+    "tableAccent": "#1D6FD0",
+    # The three state colours, exactly as the screens use them.
+    "good": "#17B26A",
+    "neutral": "#E8930C",
+    "bad": "#B42318",
+    # The sequential ramp, deep to pale: magnitude only, never identity.
+    "maximum": "#12427C",
+    "center": "#1D6FD0",
+    "minimum": "#CDE2FA",
     "textClasses": {
-        "title": {"color": "#172A35", "fontSize": 14, "fontFace": "Segoe UI Semibold"},
-        "header": {"color": "#172A35", "fontSize": 11, "fontFace": "Segoe UI Semibold"},
-        "label": {"color": "#40606E", "fontSize": 10, "fontFace": "Segoe UI"},
-        "callout": {"color": "#173F4F", "fontSize": 28, "fontFace": "Segoe UI Light"},
+        "title": {"color": "#0F172A", "fontSize": 14, "fontFace": "Segoe UI Semibold"},
+        "header": {"color": "#0F172A", "fontSize": 11, "fontFace": "Segoe UI Semibold"},
+        "label": {"color": "#5B6B7F", "fontSize": 10, "fontFace": "Segoe UI"},
+        "callout": {"color": "#1D6FD0", "fontSize": 28, "fontFace": "Segoe UI Light"},
     },
     "visualStyles": {
         "*": {

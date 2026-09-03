@@ -152,18 +152,28 @@ VALIDATION_CODES = {
     "LM-002": "LOG2026",
 }
 
+#: The assembly stations, in the order a WhAP passes through them.
+#:
+#: They used to be "Poste d'assemblage 01" through "Controle final 08" - names
+#: that describe a factory in general and this one not at all. A screen showing
+#: which station is short of parts is only useful if the reader knows what that
+#: station does: a shortage on the turret line is a different conversation from
+#: a shortage on the wiring line.
+#:
+#: Three lines, as the flow actually splits: the hull is built and armoured,
+#: the running gear and powertrain go in, then armament and electronics before
+#: final acceptance.
 STATIONS = [
-    ("ST-01", "Poste d'assemblage 01", "Ligne 1"),
-    ("ST-02", "Poste d'assemblage 02", "Ligne 1"),
-    ("ST-03", "Poste de cablage 03", "Ligne 2"),
-    ("ST-04", "Assemblage final 04", "Ligne 2"),
-    ("ST-05", "Poste trains roulants 05", "Ligne 1"),
-    ("ST-06", "Poste d'habillage 06", "Ligne 2"),
-    ("ST-07", "Poste electronique 07", "Ligne 3"),
-    ("ST-08", "Controle final 08", "Ligne 3"),
+    ("ST-01", "Chassis et coque 8x8", "Ligne 1 - Structure"),
+    ("ST-02", "Blindage modulaire STANAG", "Ligne 1 - Structure"),
+    ("ST-03", "Motorisation Cummins ISX 600", "Ligne 2 - Mobilite"),
+    ("ST-04", "Transmission et suspension", "Ligne 2 - Mobilite"),
+    ("ST-05", "Etancheite et propulsion amphibie", "Ligne 2 - Mobilite"),
+    ("ST-06", "Tourelle et armement", "Ligne 3 - Systemes"),
+    ("ST-07", "Electronique et optronique", "Ligne 3 - Systemes"),
+    ("ST-08", "Controle final et reception", "Ligne 3 - Systemes"),
 ]
 
-#: The vehicle the nomenclature describes.
 #: The vehicle the whole catalogue exists for.
 #:
 #: Named properly: "Vehicule blinde 8x8" described a category, not a product,

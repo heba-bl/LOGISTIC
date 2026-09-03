@@ -1810,7 +1810,11 @@ def _bom_sheet(
 
     sheet["C3"] = "VEHICULES A PRODUIRE"
     sheet["C3"].font = Font(size=10, bold=True, color=HEADER_BG)
-    sheet["D3"] = 5
+    # Nine, not five: the Casablanca plant is sized for 100 WhAP a year, which
+    # is a monthly batch of roughly nine. A default that matches the announced
+    # cadence makes QUANTITE_REQUISE a figure somebody can act on rather than
+    # an arbitrary multiple.
+    sheet["D3"] = 9
     sheet["D3"].font = Font(size=12, bold=True, color=INK)
     sheet["D3"].fill = PatternFill("solid", start_color="FFF4CE")
     sheet["D3"].border = CELL_BORDER

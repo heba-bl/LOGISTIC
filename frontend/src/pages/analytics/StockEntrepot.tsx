@@ -238,6 +238,14 @@ export default function StockEntrepot() {
           />
         }
         delay={0.08}
+        // The chart shows the worst gaps, which on this data are all at zero
+        // stock - twelve bars at nothing reads as an empty warehouse. The
+        // footer supplies the denominator the bars cannot: most open requests
+        // are covered, and these are the ones that are not.
+        footer={t('card.stockVsDemand.footer', {
+          shown: String(filteredRows.length),
+          open: String(overview.production?.open_count ?? 0),
+        })}
       >
         <AnalyticsStockDemand
           rows={filteredRows}

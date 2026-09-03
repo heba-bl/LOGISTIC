@@ -230,7 +230,9 @@ def stock_vs_demand(db: Session, limit: int = 12) -> list[dict]:
     """Available stock against confirmed production demand, per reference.
 
     Sorted by how close the reference is to stopping a line, so the first rows
-    are the ones worth looking at.
+    are the ones worth looking at - but never only those. See the selection at
+    the end: a chart that shows shortfalls alone cannot say where the line
+    between short and covered falls.
     """
     stocks = StockRepository(db)
     # One grouped query rather than one per reference: at 2 239 articles the
@@ -278,7 +280,29 @@ def stock_vs_demand(db: Session, limit: int = 12) -> list[dict]:
             -row["demand"],
         )
     )
-    return rows[:limit]
+
+    # Both sides of the line, not just the wrong one.
+    #
+    # Ranking by severity and cutting at twelve meant every row returned was a
+    # shortfall - by construction, since CRITICAL is exactly `available <
+    # demand` and there are more than twelve of those. Twelve red bars read as
+    # an empty warehouse, while in fact most open requests are covered, and a
+    # chart whose bars all carry the same sign says nothing about where the
+    # line actually falls.
+    #
+    # So the worst keep the front - that is where a manager acts - and the tail
+    # is filled with covered references, most-demanded first, so the reader can
+    # see what "covered" looks like beside what "short" looks like.
+    short = [row for row in rows if row["gap"] < 0]
+    covered = [row for row in rows if row["gap"] >= 0]
+
+    keep_short = min(len(short), max(limit - 4, limit // 2))
+    chosen = short[:keep_short]
+    chosen += sorted(covered, key=lambda row: -row["demand"])[: limit - len(chosen)]
+
+    # Back into one ranking, so the chart still reads worst-first.
+    chosen.sort(key=lambda row: (severity_rank[row["risk"]], -row["demand"]))
+    return chosen
 
 
 def stock_totals(db: Session) -> dict:

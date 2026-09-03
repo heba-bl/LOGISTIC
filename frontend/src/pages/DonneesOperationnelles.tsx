@@ -3,6 +3,7 @@ import { CheckCircle2, Download, FileSpreadsheet, Table2 } from 'lucide-react'
 
 import { PageHeader } from '@/components/PageHeader'
 import { Badge, Button, EmptyState, ErrorPanel, LoadingPanel, Modal, Panel } from '@/components/ui'
+import { FilterBar, matches } from '@/features/supervision/shell'
 import { useApiResource } from '@/hooks'
 import { useI18n } from '@/i18n/I18nProvider'
 import { dataApi, importsApi } from '@/services/slcc.service'
@@ -30,12 +31,30 @@ export default function DonneesOperationnelles() {
   const { t, ts, formatDate, formatNumber } = useI18n()
 
   const status = useApiResource(() => dataApi.status(), [])
+  const [search, setSearch] = useState('')
   const imports = useApiResource(() => importsApi.list(), [])
 
   const [zone, setZone] = useState<string | null>(null)
 
-  const pending = imports.data?.filter((item) => item.status === 'PENDING_REVIEW') ?? []
-  const decided = imports.data?.filter((item) => item.status !== 'PENDING_REVIEW') ?? []
+  // A hundred batches with no way to narrow them: finding the one a supplier
+  // is asking about meant reading every row. The search covers what somebody
+  // actually knows when they come looking - a reference, a file name, or the
+  // matricule of whoever entered or signed it.
+  const matching = (imports.data ?? []).filter((item) =>
+    matches(
+      [
+        item.reference,
+        item.source_filename,
+        item.maker_reference,
+        item.checker_reference,
+        item.import_type,
+      ],
+      search,
+    ),
+  )
+
+  const pending = matching.filter((item) => item.status === 'PENDING_REVIEW')
+  const decided = matching.filter((item) => item.status !== 'PENDING_REVIEW')
 
   return (
     <div className="space-y-4">
@@ -137,6 +156,16 @@ export default function DonneesOperationnelles() {
       </Panel>
 
       {/* Maker / Checker */}
+      <FilterBar
+        search={search}
+        onSearch={setSearch}
+        placeholder={t('data.searchPlaceholder')}
+        count={t('common.rowsShown', {
+          shown: String(matching.length),
+          total: String(imports.data?.length ?? 0),
+        })}
+        onReset={() => setSearch('')}
+      />
       <Panel
         title={t('data.pending')}
         subtitle={t('data.pendingSubtitle', { count: pending.length })}

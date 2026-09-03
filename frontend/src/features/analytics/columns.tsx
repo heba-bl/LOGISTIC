@@ -189,10 +189,14 @@ export function AnalyticsColumnPairs({
                 y={baseline + 32}
                 textAnchor="middle"
                 className={cn('fill-current', uncovered ? 'text-crit-soft' : 'text-ink-3')}
-                style={{ fontSize: 9.5, fontWeight: uncovered ? 600 : 400 }}
+                style={{ fontSize: 11, fontWeight: uncovered ? 600 : 400 }}
               >
-                {row.gap > 0 ? '+' : ''}
-                {formatNumber(row.gap)}
+                {/* "manque 60", not "-60": a negative quantity of parts does
+                    not exist, and the reader should not have to work out that
+                    a minus sign in front of a stock means "owed". */}
+                {row.gap < 0
+                  ? t('chart.missingShort', { count: formatNumber(-row.gap) })
+                  : formatNumber(row.gap)}
               </text>
             </g>
           )
@@ -209,7 +213,10 @@ export function AnalyticsColumnPairs({
             { label: t('chart.demand'), value: formatNumber(rows[hover].demand) },
             {
               label: t('chart.gap'),
-              value: `${rows[hover].gap > 0 ? '+' : ''}${formatNumber(rows[hover].gap)}`,
+              value:
+                rows[hover].gap < 0
+                  ? t('chart.missing', { count: formatNumber(-rows[hover].gap) })
+                  : t('chart.spare', { count: formatNumber(rows[hover].gap) }),
               className: rows[hover].gap < 0 ? 'text-crit-soft' : 'text-ok-soft',
             },
             ...(rows[hover].coverage_days !== null

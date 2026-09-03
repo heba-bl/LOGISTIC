@@ -8,7 +8,7 @@
  *   scatter   - which references combine heavy use with a thin balance?
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 
 import { cn } from '@/utils/cn'
@@ -459,6 +459,44 @@ export function ScatterPlot({
   }
   const risk = coverageLine(riskDays)
 
+  /**
+   * Where each critical label can sit without landing on another.
+   *
+   * The plot names only the references at risk, and on this data they all have
+   * zero stock - identical y, so the default position stacked them. Each label
+   * is nudged upwards until it clears the ones already placed; one that still
+   * has nowhere to go is dropped rather than printed over its neighbour, and
+   * the tooltip continues to name every point on hover.
+   */
+  const labelAt = useMemo(() => {
+    const placed: { x: number; y: number }[] = []
+    const chosen = new Map<number, number>()
+    const HALF_WIDTH = 34
+    const LINE = 13
+
+    points.forEach((point, index) => {
+      if (point.risk !== 'CRITICAL') return
+      const x = logX(point.daily_consumption)
+      const base = y(point.available) - r(point.demand) - 4
+
+      for (let step = 0; step < 6; step += 1) {
+        const candidate = base - step * LINE
+        if (candidate < 10) break
+        const clashes = placed.some(
+          (other) =>
+            Math.abs(other.x - x) < HALF_WIDTH * 2 &&
+            Math.abs(other.y - candidate) < LINE,
+        )
+        if (!clashes) {
+          placed.push({ x, y: candidate })
+          chosen.set(index, candidate)
+          return
+        }
+      }
+    })
+    return chosen
+  }, [points, logX, y, r])
+
   return (
     <div className="relative">
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full" role="img" aria-label={riskZoneLabel}>
@@ -569,11 +607,15 @@ export function ScatterPlot({
               onClick={onSelect ? () => onSelect(point.part_id) : undefined}
               cursor={onSelect ? 'pointer' : undefined}
             />
-            {/* Only the at-risk references are named, so the plot stays readable. */}
-            {point.risk === 'CRITICAL' && (
+            {/* Only the at-risk references are named, and only where the name
+                has room. Every critical part here sits at zero stock, so they
+                share a y and their labels were printing on top of each other -
+                two references overlapping is worse than one of them hidden,
+                because the reader cannot tell which is which. */}
+            {labelAt.get(index) !== undefined && (
               <text
                 x={logX(point.daily_consumption)}
-                y={y(point.available) - r(point.demand) - 4}
+                y={labelAt.get(index)}
                 textAnchor="middle"
                 className="fill-current text-ink-2"
                 style={{ fontSize: 11 }}

@@ -51,6 +51,20 @@ export default function VueGlobale() {
   const [qualityState, setQualityState] = useState<string | null>(null)
   const [zone, setZone] = useState<string | null>(null)
 
+  /**
+   * Six references, from both sides of the line.
+   *
+   * Taking the first six of a list ranked by severity showed six shortfalls and
+   * nothing else, because there are more than six. Six bars all pointing the
+   * same way say "it is bad" six times and never say where covered begins - so
+   * four of the worst keep the front, and the two best-stocked close it.
+   */
+  const headline = useMemo(() => {
+    const short = stock_vs_demand.filter((row) => row.gap < 0)
+    const covered = stock_vs_demand.filter((row) => row.gap >= 0)
+    return [...short.slice(0, 4), ...covered.slice(0, 6 - Math.min(short.length, 4))]
+  }, [stock_vs_demand])
+
   //: One subject at a time - two active filters and nobody knows what they see.
   function selectPart(next: number | null) {
     setPartId(next)
@@ -231,7 +245,7 @@ export default function VueGlobale() {
         delay={0.05}
       >
         <AnalyticsColumnPairs
-          rows={stock_vs_demand.slice(0, 6)}
+          rows={headline}
           emptyMessage={t('card.stockVsDemand.empty')}
           selectedId={partId}
           onSelect={(next) => selectPart(next === partId ? null : next)}

@@ -219,10 +219,14 @@ export function StockDemandBars({
                     uncovered ? 'bg-crit/12 text-crit-soft' : 'bg-ok/12 text-ok-soft',
                   )}
                 >
-                  {row.gap > 0 ? '+' : ''}
-                  {formatNumber(row.gap)}
+                  {/* "-60" beside a bar reads as a negative stock, which does
+                      not exist. It is a shortfall: sixty missing. Say the word
+                      and drop the sign - the reader should not have to work out
+                      that a minus in front of a quantity means "owed". */}
+                  {row.gap < 0
+                    ? t('chart.missing', { count: formatNumber(-row.gap) })
+                    : t('chart.spare', { count: formatNumber(row.gap) })}
                 </span>
-                <span className="text-[11px] text-ink-3">{t('chart.gap')}</span>
               </p>
             </Row>
           </li>

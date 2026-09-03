@@ -10,6 +10,7 @@ import StockEntrepot from '@/pages/analytics/StockEntrepot'
 import VueGlobale from '@/pages/analytics/VueGlobale'
 import DonneesOperationnelles from '@/pages/DonneesOperationnelles'
 import Entry from '@/pages/Entry'
+import Equipe from '@/pages/Equipe'
 import FichierOperationnel from '@/pages/FichierOperationnel'
 import Inspection from '@/pages/Inspection'
 import MissionControl from '@/pages/MissionControl'
@@ -60,6 +61,7 @@ export default function App() {
         </Route>
         <Route path="/ai-assistant" element={<AiAssistant />} />
 
+        <Route path="/equipe" element={<Equipe />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<NotFound />} />
       </Route>

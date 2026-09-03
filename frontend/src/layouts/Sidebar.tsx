@@ -130,7 +130,10 @@ function Navigation({
       ref={listRef}
       onMouseLeave={() => setHover(null)}
       className={cn(
-        'relative flex-1 space-y-0.5 overflow-y-auto pb-4',
+        // pb-6, not pb-4: the rail scrolls on a short screen and the last entry
+        // could never reach the top of the fold - it sat permanently clipped
+        // by ten pixels against the footer.
+        'relative flex-1 space-y-0.5 overflow-y-auto pb-6',
         collapsed ? 'px-2' : 'px-3',
       )}
     >
